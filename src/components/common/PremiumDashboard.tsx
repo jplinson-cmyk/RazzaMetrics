@@ -15,7 +15,7 @@ import {
 } from "../../services/explorer";
 import type { ActiveTab } from "../layout/Sidebar";
 import { DeltaBadge, SegmentedTabs, Skeleton, Sparkline, Truncate, WidgetState } from "../explorer/ui";
-import { Donut, HBars } from "../explorer/charts";
+import { AreaGradient, curve, Donut, HBars } from "../explorer/charts";
 import type { PerformanceRow } from "../../services/measurements";
 
 const DAY = 86400000;
@@ -178,20 +178,21 @@ function TrendCard({ days, prevDays, hasSearch }: { days: DayPoint[]; prevDays: 
   const right = axis(Math.max(0, ...days.map((d) => d.keywords).filter(Number.isFinite)), true);
   const x = (i: number) => L + (days.length > 1 ? (i / (days.length - 1)) * plotW : plotW / 2);
   const y = (v: number, top: number) => T + plotH - (v / top) * plotH;
-  const line = (vals: number[], top: number) =>
-    vals.map((v, i) => (Number.isFinite(v) ? `${i === 0 || !Number.isFinite(vals[i - 1]) ? "M" : "L"}${x(i).toFixed(1)} ${y(v, top).toFixed(1)}` : "")).join(" ");
+  // Unbroken runs of days with a value; a gap in the data stays a gap in the line.
+  const runs = (vals: number[]) => {
+    const out: number[][] = [];
+    vals.forEach((v, i) => {
+      if (!Number.isFinite(v)) return;
+      if (i > 0 && Number.isFinite(vals[i - 1])) out[out.length - 1].push(i);
+      else out.push([i]);
+    });
+    return out;
+  };
+  const line = (vals: number[], top: number) => runs(vals).map((r) => curve(r.map((i) => [x(i), y(vals[i], top)]))).join(" ");
   const mainVals = days.map((d) => d[key]);
-  const area = (() => {
-    const segs: string[] = [];
-    let run: number[] = [];
-    const flush = () => {
-      if (run.length > 1) segs.push(`M${x(run[0])} ${T + plotH} ` + run.map((i) => `L${x(i).toFixed(1)} ${y(mainVals[i], left.top).toFixed(1)}`).join(" ") + ` L${x(run[run.length - 1])} ${T + plotH} Z`);
-      run = [];
-    };
-    mainVals.forEach((v, i) => (Number.isFinite(v) ? run.push(i) : flush()));
-    flush();
-    return segs.join(" ");
-  })();
+  const area = runs(mainVals).filter((r) => r.length > 1)
+    .map((r) => `${curve(r.map((i) => [x(i), y(mainVals[i], left.top)]))} L${x(r[r.length - 1]).toFixed(1)} ${T + plotH} L${x(r[0]).toFixed(1)} ${T + plotH} Z`)
+    .join(" ");
   const pick = (clientX: number, rect: DOMRect) => {
     const px = ((clientX - rect.left) / rect.width) * W;
     return Math.max(0, Math.min(days.length - 1, Math.round(((px - L) / plotW) * (days.length - 1))));
@@ -264,7 +265,8 @@ function TrendCard({ days, prevDays, hasSearch }: { days: DayPoint[]; prevDays: 
                   {days[i]?.date.slice(5)}
                 </text>
               ))}
-              {show.main && <path className="series-area" d={area} />}
+              <AreaGradient id="trend-area" />
+              {show.main && <path className="series-area" fill="url(#trend-area)" d={area} />}
               {show.main && <path className="series-main" d={line(mainVals, left.top)} />}
               {show.footprint && <path className="series-alt" d={line(days.map((d) => d.keywords), right.top)} />}
               {h && (

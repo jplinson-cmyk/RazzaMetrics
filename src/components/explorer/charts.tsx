@@ -3,9 +3,43 @@ import { display } from "../../services/measurements";
 import { abbreviate } from "../../services/explorer";
 import { Truncate } from "./ui";
 
+/**
+ * Smooth path through points with monotone cubic curves (Fritsch–Carlson): the curve never
+ * overshoots between two points, so a line never dips below zero or above a real peak.
+ */
+export function curve(pts: [number, number][]): string {
+  if (pts.length < 3) return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  const n = pts.length;
+  const d = pts.slice(1).map(([x, y], i) => (y - pts[i][1]) / (x - pts[i][0] || 1));
+  const m = pts.map((_, i) => (i === 0 ? d[0] : i === n - 1 ? d[n - 2] : d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2));
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+    if (s > 9) { const t = 3 / Math.sqrt(s); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+  }
+  let path = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], h = (x1 - x0) / 3;
+    path += ` C${(x0 + h).toFixed(1)} ${(y0 + m[i] * h).toFixed(1)} ${(x1 - h).toFixed(1)} ${(y1 - m[i + 1] * h).toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+  }
+  return path;
+}
+
+/** Vertical fade under a line, coloured by the series' CSS `color`. */
+export function AreaGradient({ id }: { id: string }) {
+  return (
+    <defs>
+      <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+        <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+      </linearGradient>
+    </defs>
+  );
+}
+
 /** Donut for a share of at most four parts; the legend table carries the exact numbers. */
 export function Donut({ parts, unit, label }: { parts: { name: string; value: number; share: number }[]; unit: string; label: string }) {
-  const r = 52, c = 2 * Math.PI * r;
+  const r = 54, c = 2 * Math.PI * r;
   let offset = 0;
   const total = parts.reduce((n, p) => n + p.value, 0);
   return (
@@ -16,7 +50,7 @@ export function Donut({ parts, unit, label }: { parts: { name: string; value: nu
           const len = (p.share / 100) * c;
           const seg = (
             <circle key={p.name} cx="70" cy="70" r={r} className={`donut-seg series-${i + 1}`}
-              strokeDasharray={`${Math.max(0, len - 2)} ${c}`} strokeDashoffset={-offset} transform="rotate(-90 70 70)" />
+              strokeDasharray={`${Math.max(0, len - (parts.length > 1 ? 3 : 0))} ${c}`} strokeDashoffset={-offset} transform="rotate(-90 70 70)" />
           );
           offset += len;
           return seg;
@@ -117,12 +151,18 @@ export function CtrScatter({ points }: { points: ScatterPoint[] }) {
   );
 }
 
+/** Bar from a baseline at y0, `h` px tall (negative grows upward), rounded only at its free end. */
+function bar(x: number, y0: number, w: number, h: number) {
+  const r = Math.min(5, w / 2, Math.abs(h)), s = Math.sign(h) || 1, y1 = y0 + h;
+  return `M${x} ${y0} V${y1 - s * r} Q${x} ${y1} ${x + r} ${y1} H${x + w - r} Q${x + w} ${y1} ${x + w} ${y1 - s * r} V${y0} Z`;
+}
+
 /** Weekly bars mirrored on one baseline: gains above in green, losses below in coral. */
 export function MirrorBars({ weeks }: { weeks: { from: string; to: string; gained: number; lost: number }[] }) {
   const W = 680, H = 220, L = 36, R = 8, T = 10, B = 26;
   const max = Math.max(1, ...weeks.flatMap((w) => [w.gained, w.lost]));
   const mid = T + (H - T - B) / 2, half = (H - T - B) / 2;
-  const slot = (W - L - R) / weeks.length, bw = Math.min(28, slot * 0.6);
+  const slot = (W - L - R) / weeks.length, bw = Math.min(16, slot * 0.45);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="bars-svg" role="img"
       aria-label={`Referring domains gained and lost per week: ${weeks.reduce((n, w) => n + w.gained, 0)} gained, ${weeks.reduce((n, w) => n + w.lost, 0)} lost over ${weeks.length} weeks.`}>
@@ -134,8 +174,8 @@ export function MirrorBars({ weeks }: { weeks: { from: string; to: string; gaine
         return (
           <g key={w.from}>
             <title>{`${w.from} to ${w.to}: +${w.gained} new, −${w.lost} lost`}</title>
-            {w.gained > 0 && <rect className="bar-up" x={cx - bw / 2} y={mid - (w.gained / max) * half} width={bw} height={(w.gained / max) * half} rx="2" />}
-            {w.lost > 0 && <rect className="bar-down" x={cx - bw / 2} y={mid} width={bw} height={(w.lost / max) * half} rx="2" />}
+            {w.gained > 0 && <path className="bar-up" d={bar(cx - bw / 2, mid, bw, -(w.gained / max) * half)} />}
+            {w.lost > 0 && <path className="bar-down" d={bar(cx - bw / 2, mid, bw, (w.lost / max) * half)} />}
             {(i === 0 || i === weeks.length - 1 || i === Math.floor(weeks.length / 2)) && (
               <text className="tick" x={cx} y={H - 6} textAnchor="middle">{w.to.slice(5)}</text>
             )}
@@ -150,7 +190,7 @@ export function MirrorBars({ weeks }: { weeks: { from: string; to: string; gaine
 export function StackedBars({ audits }: { audits: { id: string; date: string; error: number; warning: number; notice: number }[] }) {
   const W = 680, H = 240, L = 36, R = 8, T = 10, B = 26;
   const max = Math.max(1, ...audits.map((a) => a.error + a.warning + a.notice));
-  const ph = H - T - B, slot = (W - L - R) / audits.length, bw = Math.min(44, slot * 0.6);
+  const ph = H - T - B, slot = (W - L - R) / audits.length, bw = Math.min(32, slot * 0.45);
   const y = (v: number) => T + ph - (v / max) * ph;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="bars-svg" role="img"
@@ -191,6 +231,7 @@ export function ScoreLine({ series }: { series: { name: string; className: strin
   const pw = W - L - R, ph = H - T - B;
   const x = (d: string) => L + (dates.length > 1 ? (dates.indexOf(d) / (dates.length - 1)) * pw : pw / 2);
   const y = (v: number) => T + ph - (v / 100) * ph;
+  const gid = React.useId().replace(/:/g, "");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="bars-svg" role="img"
       aria-label={series.map((s) => `${s.name}: ${s.points.map((p) => `${p.date} ${p.value}`).join(", ")}`).join("; ")}>
@@ -200,11 +241,18 @@ export function ScoreLine({ series }: { series: { name: string; className: strin
           <text className="tick" x={L - 6} y={y(t) + 4} textAnchor="end">{t}</text>
         </g>
       ))}
-      {series.map((s) => (
+      {series.map((s, n) => (
         <g key={s.name} className={s.className}>
-          <path className="score-line" d={s.points.map((p, i) => `${i ? "L" : "M"}${x(p.date)} ${y(p.value)}`).join(" ")} />
+          {n === 0 && s.points.length > 1 && (
+            <>
+              <AreaGradient id={`${gid}-${n}`} />
+              <path className="score-area" fill={`url(#${gid}-${n})`}
+                d={`${curve(s.points.map((p) => [x(p.date), y(p.value)]))} L${x(s.points[s.points.length - 1].date)} ${y(0)} L${x(s.points[0].date)} ${y(0)} Z`} />
+            </>
+          )}
+          <path className="score-line" d={curve(s.points.map((p) => [x(p.date), y(p.value)]))} />
           {s.points.map((p) => (
-            <circle key={p.date} className="score-dot" cx={x(p.date)} cy={y(p.value)} r="4"><title>{`${s.name} ${p.date}: ${p.value}`}</title></circle>
+            <circle key={p.date} className="score-dot" cx={x(p.date)} cy={y(p.value)} r="3.5"><title>{`${s.name} ${p.date}: ${p.value}`}</title></circle>
           ))}
         </g>
       ))}

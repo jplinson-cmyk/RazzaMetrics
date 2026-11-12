@@ -747,3 +747,29 @@ main.app-main { background: transparent; }
   .report-actions { display: none !important; }
   .report-section { break-inside: avoid; }
 }
+
+/* ---------- Chart polish: soft dashed grids, smooth lines with a fade, rounded bars, thin rings ---------- */
+.trend-svg .grid, .bars-svg .grid, .scatter-svg .grid { stroke: var(--color-rule); stroke-dasharray: 2 4; }
+.trend-svg { color: var(--color-accent); }
+.trend-svg .series-area { fill: url(#trend-area); }
+.series-main, .score-line { stroke-width: 2.25; }
+.series-alt { stroke-width: 1.75; stroke-dasharray: 4 4; }
+.score-mobile { color: var(--color-accent); }
+.score-dot { stroke-width: 1.5; }
+.bars-svg .baseline { stroke: var(--color-rule-2); }
+.bar-up { fill: var(--color-accent); } .bar-down { fill: var(--color-bad); }
+.swatch--up { background: var(--color-accent); }
+.seg-error, .seg-warning, .seg-notice { stroke-width: 1.5; }
+.donut-track { stroke: var(--color-paper-3); stroke-width: 14; }
+.donut-seg { stroke-width: 14; }
+.donut-total { font-size: 24px; letter-spacing: -0.02em; }
+.hbar-track { height: 8px; border-radius: 999px; }
+.hbar-fill { border-radius: 999px; }
+.div-axis { height: 10px; }
+.div-bar { border-radius: 999px; }
+.div-bar--up { background: var(--color-accent); }
+.div-value.is-up { color: var(--color-accent); }
+.dist-bar { height: 14px; gap: 3px; border: 0; border-radius: 999px; background: transparent; }
+.dist-seg { border-radius: 3px; }
+.dist-seg:first-child { border-radius: 999px 3px 3px 999px; }
+.dist-seg:last-child { border-radius: 3px 999px 999px 3px; }
