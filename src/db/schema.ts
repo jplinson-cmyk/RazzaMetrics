@@ -155,7 +155,7 @@ export interface PageSpeedResult {
   labLcp?: number;
   labCls?: number;
   /** Total Blocking Time in seconds: the lab stand-in for INP. */
-  labTbt?: number;
+  labTbt?: number | null;
   /** Which real-visitor data was used: this page, or the whole site when the page has too few visits. */
   fieldScope?: "page" | "site" | null;
   lighthouseJson?: string;

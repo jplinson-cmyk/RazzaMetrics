@@ -609,7 +609,7 @@ async function pageSpeed(
         : undefined,
     labCls: audits["cumulative-layout-shift"]?.numericValue,
     // Total Blocking Time is the lab stand-in for INP, which needs real visitors.
-    labTbt: audits["total-blocking-time"]?.numericValue !== undefined ? audits["total-blocking-time"].numericValue! / 1000 : undefined,
+    labTbt: audits["total-blocking-time"]?.numericValue !== undefined ? audits["total-blocking-time"].numericValue! / 1000 : null,
     lighthouseJson: JSON.stringify(data.lighthouseResult),
     testedAt: now(),
     fieldScope,
