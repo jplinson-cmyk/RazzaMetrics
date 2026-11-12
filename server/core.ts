@@ -1,6 +1,4 @@
 export interface Env {
-  NVIDIA_API_KEY?: string;
-  NVIDIA_AI_PRODUCTION_ENABLED?: string;
   MANUAL_ADMIN_USERNAME?: string;
   MANUAL_ADMIN_PASSWORD_HASH?: string;
   DB: D1Database;

@@ -17,7 +17,6 @@ import { aggregate } from "../src/services/measurements";
 import { abbreviate, auditSeverity, backlinkVelocity, countBy, dailySeries, delta, movers, positionDistribution, shareBy, topPages, vitalRating, weeklyVelocity } from "../src/services/explorer";
 import { scoreBacklink } from "../src/services/toxicityEngine";
 import { enqueue, runJobs } from "../server/jobs";
-import { seoAdvice, SEO_MODELS } from "../server/ai";
 import { parseSitemap, sitemapSeeds } from "../server/sitemaps";
 
 describe("upstream audit alignment", () => {
@@ -188,51 +187,6 @@ afterEach(async () => {
 });
 
 describe("authentication and authorization", () => {
-  it("AI advice is project authorized, persists its source, and hides provider credentials", async () => {
-    env.NVIDIA_API_KEY = "test-secret";
-    env.NVIDIA_AI_PRODUCTION_ENABLED = "true";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        Response.json({
-          choices: [
-            {
-              message: {
-                content: "Review missing titles using audit evidence.",
-              },
-            },
-          ],
-        }),
-      ),
-    );
-    expect(
-      (
-        await request("/projects/p2/ai", "POST", {
-          question: "Recommend fixes",
-        })
-      ).status,
-    ).toBe(404);
-    const r = await request("/projects/p1/ai", "POST", {
-      question: "Recommend fixes",
-      model: SEO_MODELS[0],
-    });
-    expect(r.status).toBe(200);
-    expect(await r.text()).not.toContain("test-secret");
-    // The model sees every stored data source, not just queries and findings.
-    const sent = JSON.parse(JSON.parse(String((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.at(-1)![1].body)).messages[1].content);
-    expect(Object.keys(sent.projectContext)).toEqual(expect.arrayContaining(["search", "backlinks", "pageSpeed", "siteAudit", "issues", "trackedKeywords", "missingData"]));
-    expect(sent.projectContext.search).toHaveProperty("previous28Days");
-    expect(sql.prepare("SELECT * FROM ai_reports").all()).toHaveLength(1);
-    env.NVIDIA_AI_PRODUCTION_ENABLED = "false";
-    await expect(
-      seoAdvice(
-        env,
-        { id: "p1", domain: "example.com" },
-        "Advice",
-        SEO_MODELS[0],
-      ),
-    ).rejects.toThrow("disabled in production");
-  });
   it("allows only verified company Google email addresses", () => {
     expect(allowedGoogleEmail("jp.linson@razzaconsulting.com", true)).toBe(
       true,

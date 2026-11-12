@@ -1,4 +1,3 @@
-import { SeoAssistant } from "./components/common/SeoAssistant";
 import React, { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -65,7 +64,6 @@ const MainLayout: React.FC = () => {
       {!user && <LoginModal isOpen={true} />}
 
       <div className="flex h-dvh overflow-hidden">
-        <SeoAssistant key={currentProject.id} />
         {/* Desktop Sidebar */}
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 

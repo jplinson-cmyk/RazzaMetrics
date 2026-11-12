@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { seoAdvice, SEO_MODELS } from "./ai";
 import {
   beginOAuth,
   callback,
@@ -241,21 +240,6 @@ async function api(
   if (!match) throw new HttpError(404, "API route not found.");
   const p = await authorizedProject(env, user.id, decodeURIComponent(match[1]));
   const action = match[2] || "";
-  if (action === "ai" && req.method === "GET")
-    return json({
-      models: SEO_MODELS,
-      reports: await objects(env, "ai_reports", p.id, 20),
-      configured: !!env.NVIDIA_API_KEY,
-    });
-  if (action === "ai" && req.method === "POST") {
-    const b = z
-      .object({
-        question: z.string().trim().min(3).max(3000),
-        model: z.enum(SEO_MODELS).default(SEO_MODELS[0]),
-      })
-      .parse(await readBody(req));
-    return json(await seoAdvice(env, p, b.question, b.model));
-  }
   if (action === "settings" && req.method === "GET")
     return json(await settings(env, p.id));
   if (action === "settings" && req.method === "PUT") {
