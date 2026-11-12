@@ -59,14 +59,18 @@ export const AuditCharts: React.FC = () => {
             {speed.latest && (
               <dl className="vitals">
                 {(["lcp", "inp", "cls"] as const).map((m) => {
-                  const v = speed.latest![m];
+                  // Low-traffic sites have no real-visitor (field) data; fall back to the Lighthouse lab value and say so. INP has no lab equivalent.
+                  const field = speed.latest![m] ?? undefined;
+                  const lab = m === "lcp" ? speed.latest!.labLcp : m === "cls" ? speed.latest!.labCls : undefined;
+                  const v = field ?? lab ?? undefined;
+                  const isLab = field === undefined && v !== undefined;
                   const rating = vitalRating(m, v);
                   return (
                     <div key={m} className={`vital vital--${rating}`}>
                       <dt>{{ lcp: "Largest Contentful Paint", inp: "Interaction to Next Paint", cls: "Cumulative Layout Shift" }[m]}</dt>
                       <dd>
                         <span className="vital-value">{v === undefined ? "No Data" : m === "cls" ? display(v, 2) : `${display(v, 2)} s`}</span>
-                        <span className="vital-rating">{RATING[rating]}</span>
+                        <span className="vital-rating">{RATING[rating]}{isLab ? " (lab)" : ""}</span>
                       </dd>
                     </div>
                   );

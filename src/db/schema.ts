@@ -151,6 +151,9 @@ export interface PageSpeedResult {
   inp?: number;
   fcp?: number;
   ttfb?: number;
+  /** Lighthouse lab values, used when Google has no real-visitor (field) data. */
+  labLcp?: number;
+  labCls?: number;
   lighthouseJson?: string;
   testedAt: string;
 }
