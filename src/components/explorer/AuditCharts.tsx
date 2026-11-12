@@ -59,18 +59,23 @@ export const AuditCharts: React.FC = () => {
             {speed.latest && (
               <dl className="vitals">
                 {(["lcp", "inp", "cls"] as const).map((m) => {
-                  // Low-traffic sites have no real-visitor (field) data; fall back to the Lighthouse lab value and say so. INP has no lab equivalent.
-                  const field = speed.latest![m] ?? undefined;
-                  const lab = m === "lcp" ? speed.latest!.labLcp : m === "cls" ? speed.latest!.labCls : undefined;
+                  // Low-traffic sites have no real-visitor (field) data; fall back to the Lighthouse lab value and say so.
+                  // INP has no lab form, so Total Blocking Time (Google's lab stand-in for it) is shown instead.
+                  const latest = speed.latest!;
+                  const field = latest[m] ?? undefined;
+                  const lab = m === "lcp" ? latest.labLcp : m === "cls" ? latest.labCls : latest.labTbt;
                   const v = field ?? lab ?? undefined;
                   const isLab = field === undefined && v !== undefined;
-                  const rating = vitalRating(m, v);
+                  const metricKey = m === "inp" && isLab ? "tbt" : m;
+                  const rating = vitalRating(metricKey, v);
+                  const name = { lcp: "Largest Contentful Paint", inp: "Interaction to Next Paint", cls: "Cumulative Layout Shift", tbt: "Total Blocking Time" }[metricKey];
+                  const source = isLab ? " (lab)" : latest.fieldScope === "site" ? " (site-wide)" : "";
                   return (
                     <div key={m} className={`vital vital--${rating}`}>
-                      <dt>{{ lcp: "Largest Contentful Paint", inp: "Interaction to Next Paint", cls: "Cumulative Layout Shift" }[m]}</dt>
+                      <dt>{name}</dt>
                       <dd>
                         <span className="vital-value">{v === undefined ? "No Data" : m === "cls" ? display(v, 2) : `${display(v, 2)} s`}</span>
-                        <span className="vital-rating">{RATING[rating]}{isLab ? " (lab)" : ""}</span>
+                        <span className="vital-rating">{RATING[rating]}{source}</span>
                       </dd>
                     </div>
                   );

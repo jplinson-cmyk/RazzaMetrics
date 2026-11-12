@@ -535,7 +535,9 @@ async function pageSpeed(
       (r) =>
         r.url === url &&
         r.strategy === strategy &&
-        Date.parse(r.testedAt) > Date.now() - 86400000,
+        Date.parse(r.testedAt) > Date.now() - 86400000 &&
+        // Results saved before Total Blocking Time was recorded are refreshed once.
+        "labTbt" in r,
     )
   )
     return true;
@@ -564,13 +566,17 @@ async function pageSpeed(
       audits: Record<string, { numericValue?: number }>;
     };
     loadingExperience?: { metrics?: Record<string, { percentile: number }> };
+    originLoadingExperience?: { metrics?: Record<string, { percentile: number }> };
   }>();
   await checkActive();
   if (!data.lighthouseResult)
     throw new HttpError(502, "PageSpeed did not return Lighthouse results.");
   const cats = data.lighthouseResult.categories;
   const audits = data.lighthouseResult.audits;
-  const field = data.loadingExperience?.metrics || {};
+  // Page-level real-visitor data first; smaller pages often only have the site-wide (origin) figures.
+  const pageField = data.loadingExperience?.metrics || {};
+  const fieldScope = Object.keys(pageField).length ? "page" : data.originLoadingExperience?.metrics ? "site" : null;
+  const field = fieldScope === "site" ? data.originLoadingExperience!.metrics! : pageField;
   const score = (key: string) =>
     typeof cats[key]?.score === "number"
       ? Math.round(cats[key].score! * 100)
@@ -602,9 +608,12 @@ async function pageSpeed(
         ? audits["largest-contentful-paint"].numericValue! / 1000
         : undefined,
     labCls: audits["cumulative-layout-shift"]?.numericValue,
+    // Total Blocking Time is the lab stand-in for INP, which needs real visitors.
+    labTbt: audits["total-blocking-time"]?.numericValue !== undefined ? audits["total-blocking-time"].numericValue! / 1000 : undefined,
     lighthouseJson: JSON.stringify(data.lighthouseResult),
     testedAt: now(),
-    fieldSource: "CrUX URL-level (when available)",
+    fieldScope,
+    fieldSource: fieldScope === "site" ? "CrUX origin-level (site-wide)" : "CrUX URL-level (when available)",
     labSource: "Lighthouse",
   };
   await stmt(
@@ -725,7 +734,7 @@ async function runOneJob(env: Env, projectId?: string, notSkipped = ""): Promise
         JSON.stringify(payload),
         complete ? 100 : Math.min(99, progress),
         complete ? now() : null,
-        Date.now() + 1000,
+        Date.now() + (job.type === "crawl" ? 1000 : 0),
         job.id,
         lease,
       ).run();

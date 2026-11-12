@@ -154,6 +154,10 @@ export interface PageSpeedResult {
   /** Lighthouse lab values, used when Google has no real-visitor (field) data. */
   labLcp?: number;
   labCls?: number;
+  /** Total Blocking Time in seconds: the lab stand-in for INP. */
+  labTbt?: number;
+  /** Which real-visitor data was used: this page, or the whole site when the page has too few visits. */
+  fieldScope?: "page" | "site" | null;
   lighthouseJson?: string;
   testedAt: string;
 }

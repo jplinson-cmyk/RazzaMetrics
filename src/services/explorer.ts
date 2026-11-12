@@ -229,7 +229,7 @@ export function auditSeverity(
 }
 
 /** Google's Core Web Vitals thresholds (LCP and INP in seconds, CLS unitless). */
-const VITALS = { lcp: [2.5, 4], inp: [0.2, 0.5], cls: [0.1, 0.25] } as const;
+const VITALS = { lcp: [2.5, 4], inp: [0.2, 0.5], cls: [0.1, 0.25], tbt: [0.2, 0.6] } as const;
 export function vitalRating(metric: keyof typeof VITALS, value: number | undefined) {
   if (value === undefined || !Number.isFinite(value)) return "none" as const;
   const [good, poor] = VITALS[metric];

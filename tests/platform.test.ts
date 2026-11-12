@@ -1045,3 +1045,22 @@ describe("automatic Google linking", () => {
     expect(await res.json()).toMatchObject({ domain: "unlinked.example", name: "unlinked.example", code: "RZ-104", gsc_property: null });
   });
 });
+
+describe("Core Web Vitals coverage", () => {
+  it("uses site-wide real-visitor data when the page has none, and records lab TBT", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      Response.json({
+        lighthouseResult: { categories: { performance: { score: 0.6 } }, audits: { "total-blocking-time": { numericValue: 450 } } },
+        loadingExperience: { metrics: {} },
+        originLoadingExperience: { metrics: { LARGEST_CONTENTFUL_PAINT_MS: { percentile: 3100 }, INTERACTION_TO_NEXT_PAINT: { percentile: 180 }, CUMULATIVE_LAYOUT_SHIFT_SCORE: { percentile: 5 } } },
+      }),
+    ));
+    await enqueue(env, "p1", "pagespeed", { url: "https://example.com/", strategy: "mobile" });
+    await runJobs(env, "p1");
+    const r = JSON.parse(String(sql.prepare("SELECT data FROM pagespeed_results").get()?.data));
+    expect(r).toMatchObject({ fieldScope: "site", lcp: 3.1, inp: 0.18, cls: 0.05, labTbt: 0.45 });
+  });
+  it("rates Total Blocking Time on Google's lab thresholds", () => {
+    expect([vitalRating("tbt", 0.15), vitalRating("tbt", 0.45), vitalRating("tbt", 0.9)]).toEqual(["good", "improve", "poor"]);
+  });
+});
