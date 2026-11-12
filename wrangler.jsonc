@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
   "d1_databases": [{ "binding": "DB", "database_name": "razza-seo", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
-  "triggers": { "crons": ["*/5 * * * *"] },
+  "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "APP_BASE_URL": "http://localhost:8787",
     "GOOGLE_REDIRECT_URI": "http://localhost:8787/api/auth/callback",
@@ -24,7 +24,7 @@
       "name": "razza-metrics",
       "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
       "d1_databases": [{ "binding": "DB", "database_name": "razza-seo", "database_id": "52c1037e-ee11-444c-bc09-4664bbce2b80", "migrations_dir": "migrations" }],
-      "triggers": { "crons": ["*/5 * * * *"] },
+      "triggers": { "crons": ["* * * * *"] },
       "vars": {
         "APP_BASE_URL": "https://razza-metrics.razza-seo-platform.workers.dev",
         "GOOGLE_REDIRECT_URI": "https://razza-metrics.razza-seo-platform.workers.dev/api/auth/callback",
@@ -32,7 +32,7 @@
         "CRAWLER_MAX_PAGES": "25",
         "CRAWLER_MAX_DEPTH": "3",
         "DAILY_CRAWL_PAGE_LIMIT": "100",
-        "DAILY_PAGESPEED_REQUEST_LIMIT": "10",
+        "DAILY_PAGESPEED_REQUEST_LIMIT": "100",
         "DAILY_GSC_REQUEST_LIMIT": "2000",
         "CRAWLER_REQUEST_TIMEOUT_MS": "10000"
       }

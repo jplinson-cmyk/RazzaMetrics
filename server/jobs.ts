@@ -553,7 +553,8 @@ async function pageSpeed(
       "https://pagespeedonline.googleapis.com/pagespeedonline/v5/runPagespeed?" +
         params,
       {},
-      25000,
+      // A mobile Lighthouse run regularly takes 20–40 s; 25 s timed out about half of them.
+      60000,
     )
   ).json<{
     lighthouseResult?: {
@@ -614,7 +615,39 @@ async function pageSpeed(
   ).run();
   return true;
 }
-export async function runJobs(env: Env, projectId?: string) {
+// Quick, user-facing jobs first: a PageSpeed test is one request, an audit is a short crawl,
+// and a Search Console backfill can run for many batches without starving the others.
+const JOB_PRIORITY = "CASE type WHEN 'pagespeed' THEN 0 WHEN 'crawl' THEN 1 WHEN 'toxicity' THEN 2 ELSE 3 END";
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Keep processing job batches until there is no work or the time budget is spent, instead of one batch per call.
+ * The budget stays under the ~30 s a Worker may continue after responding. Each batch checkpoints its own
+ * progress, so an invocation that is cut short loses nothing.
+ */
+export async function runJobs(env: Env, projectId?: string, budgetMs = 20000, skipTypes: string[] = []) {
+  // Only whitelisted type names reach this SQL fragment.
+  const skip = skipTypes.filter((t) => /^[a-z]+$/.test(t)).map((t) => `'${t}'`).join(",");
+  const notSkipped = skip ? ` AND type NOT IN (${skip})` : "";
+  const started = Date.now();
+  for (let round = 0; round < 60 && (round === 0 || Date.now() - started < budgetMs); round++) {
+    const outcome = await runOneJob(env, projectId, notSkipped);
+    if (outcome === "busy") return; // another invocation holds the single running lease
+    if (outcome === "idle") {
+      // A crawl waits about a second between pages; wait for it if that fits the budget, otherwise stop.
+      const next = await stmt(
+        env,
+        `SELECT MIN(next_attempt) AS at FROM background_jobs WHERE status='QUEUED' ${projectId ? "AND project_id=?" : ""}${notSkipped}`,
+        ...(projectId ? [projectId] : []),
+      ).first<{ at: number | null }>();
+      const wait = next?.at ? next.at - Date.now() : Infinity;
+      if (wait > 1500 || Date.now() - started + wait > budgetMs) return;
+      await sleep(Math.max(0, wait));
+    }
+  }
+}
+
+async function runOneJob(env: Env, projectId?: string, notSkipped = ""): Promise<"ran" | "idle" | "busy"> {
   await stmt(
     env,
     "UPDATE background_jobs SET status='FAILED',last_error='Job interrupted repeatedly; retry from the tool.',completed_at=? WHERE status='RUNNING' AND lease_until<? AND attempts>=4",
@@ -623,11 +656,12 @@ export async function runJobs(env: Env, projectId?: string) {
   ).run();
   const eligible = await rows<{ id: string }>(
     env,
-    `SELECT id FROM background_jobs WHERE (status='QUEUED' OR (status='RUNNING' AND lease_until<?)) AND next_attempt<=? ${projectId ? "AND project_id=?" : ""} ORDER BY created_at LIMIT 1`,
+    `SELECT id FROM background_jobs WHERE (status='QUEUED' OR (status='RUNNING' AND lease_until<?)) AND next_attempt<=? ${projectId ? "AND project_id=?" : ""}${notSkipped} ORDER BY ${JOB_PRIORITY}, created_at LIMIT 1`,
     Date.now(),
     Date.now(),
     ...(projectId ? [projectId] : []),
   );
+  if (!eligible.length) return "idle";
   for (const item of eligible) {
     const lease = uid();
     const job = await stmt(
@@ -640,7 +674,7 @@ export async function runJobs(env: Env, projectId?: string) {
       Date.now(),
       Date.now(),
     ).first<Job>();
-    if (!job) continue;
+    if (!job) return "busy";
     const payload = JSON.parse(job.payload) as JobPayload;
     const checkpoint = JSON.parse(job.payload) as JobPayload;
     const checkActive = async () => {
@@ -745,6 +779,7 @@ export async function runJobs(env: Env, projectId?: string) {
         ).run();
     }
   }
+  return "ran";
 }
 export async function scheduled(env: Env) {
   const retention = Number(env.DATA_RETENTION_DAYS || 400);
@@ -783,5 +818,6 @@ export async function scheduled(env: Env) {
       date: p.last_sync_at ? dateAgo(7) : dateAgo(93),
       endDate: dateAgo(3),
     });
-  await runJobs(env);
+  // Cron runs may take minutes of wall time, so PageSpeed (often 20–40 s) runs here.
+  await runJobs(env, undefined, 50000);
 }

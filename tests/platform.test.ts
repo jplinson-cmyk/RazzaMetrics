@@ -911,6 +911,29 @@ describe("integration contracts", () => {
     expect(result.lcp).toBeUndefined();
     expect(result.inp).toBeUndefined();
   });
+  it("runs a PageSpeed test ahead of an older Search Console backfill", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      Response.json({ lighthouseResult: { categories: { performance: { score: 0.7 } }, audits: {} } }),
+    ));
+    // Queue the long sync first, then the quick test, and hold the sync back so only one batch can run.
+    await enqueue(env, "p1", "gsc", { date: "2026-01-01", endDate: "2026-03-01" });
+    await enqueue(env, "p1", "pagespeed", { url: "https://example.com/", strategy: "desktop" });
+    sql.prepare("UPDATE background_jobs SET created_at='2000-01-01' WHERE type='gsc'").run();
+    await runJobs(env, "p1", 0);
+    const jobs = Object.fromEntries(
+      (sql.prepare("SELECT type, status FROM background_jobs").all() as { type: string; status: string }[]).map((j) => [j.type, j.status]),
+    );
+    expect(jobs.pagespeed).toBe("COMPLETED");
+    expect(jobs.gsc).toBe("QUEUED");
+  });
+  it("leaves PageSpeed to the cron when a screen's poll skips it", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await enqueue(env, "p1", "pagespeed", { url: "https://example.com/", strategy: "mobile" });
+    await runJobs(env, "p1", 0, ["pagespeed"]);
+    expect(sql.prepare("SELECT status FROM background_jobs WHERE type='pagespeed'").get()).toEqual({ status: "QUEUED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("site explorer analytics", () => {

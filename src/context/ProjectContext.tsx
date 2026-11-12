@@ -415,11 +415,17 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({
     [];
   useEffect(() => {
     if (!active.length || !currentId) return;
+    // One "process jobs" call at a time: each call now works for up to ~25 s, so overlapping calls only waste quota.
+    let processing = false;
     const timer = window.setInterval(() => {
       void reload();
-      void projectApi(currentId, "jobs/process", "POST").catch((e) =>
-        setError(e.message),
-      );
+      if (processing) return;
+      processing = true;
+      void projectApi(currentId, "jobs/process", "POST")
+        .catch((e) => setError(e.message))
+        .finally(() => {
+          processing = false;
+        });
     }, 5000);
     return () => clearInterval(timer);
   }, [currentId, active.length, reload]);

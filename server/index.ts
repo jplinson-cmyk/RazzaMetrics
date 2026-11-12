@@ -629,8 +629,9 @@ async function api(
     return json({ id, status: "QUEUED" }, 202);
   }
   if (action === "jobs/process" && req.method === "POST") {
-    await budget(env, user.id, "job-poll", 1000);
-    ctx.waitUntil(runJobs(env, p.id));
+    await budget(env, user.id, "job-poll", 5000);
+    // Background work after a response is short-lived, so PageSpeed (often 20–40 s) is left to the cron.
+    ctx.waitUntil(runJobs(env, p.id, 20000, ["pagespeed"]));
     return json({ accepted: true });
   }
   const cancel = action.match(/^jobs\/([^/]+)\/cancel$/);
