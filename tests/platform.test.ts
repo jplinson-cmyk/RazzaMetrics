@@ -218,6 +218,10 @@ describe("authentication and authorization", () => {
     });
     expect(r.status).toBe(200);
     expect(await r.text()).not.toContain("test-secret");
+    // The model sees every stored data source, not just queries and findings.
+    const sent = JSON.parse(JSON.parse(String((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.at(-1)![1].body)).messages[1].content);
+    expect(Object.keys(sent.projectContext)).toEqual(expect.arrayContaining(["search", "backlinks", "pageSpeed", "siteAudit", "issues", "trackedKeywords", "missingData"]));
+    expect(sent.projectContext.search).toHaveProperty("previous28Days");
     expect(sql.prepare("SELECT * FROM ai_reports").all()).toHaveLength(1);
     env.NVIDIA_AI_PRODUCTION_ENABLED = "false";
     await expect(
