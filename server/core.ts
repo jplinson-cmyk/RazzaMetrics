@@ -135,7 +135,8 @@ export async function objects<T>(
   return (
     await rows<{ data: string }>(
       env,
-      `SELECT data FROM ${table} WHERE project_id=? ORDER BY created_at DESC LIMIT ?`,
+      // Older PageSpeed rows hold a ~500 KB Lighthouse report nothing reads; SQLite drops it so the Worker never parses it.
+      `SELECT json_remove(data,'$.lighthouseJson') AS data FROM ${table} WHERE project_id=? ORDER BY created_at DESC LIMIT ?`,
       projectId,
       limit,
     )
