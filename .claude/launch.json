@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "razzametrics",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:server"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "razzametrics-e2e",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/dev-worker.mjs",
+        "--e2e"
+      ],
+      "port": 8788
+    }
+  ]
+}

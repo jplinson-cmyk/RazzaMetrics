@@ -1,0 +1,94 @@
+/* Razza Consulting brand palette on the Furrow structure. Every colour in the app resolves here; DESIGN.md documents each token.
+ * Brand: Lime Chartreuse #A3CA39, Soft Lime #C2DF71, Leaf Green #99BE3A, Header Charcoal #2F2F2F, Onyx Charcoal #262626, Pure White #FFFFFF, Slate Blue #486D7F.
+ * Lime on white is 1.9:1, so lime is a fill under charcoal text (8:1) or a mark on charcoal; on white, lines and text use --color-accent (deep leaf, 5:1). */
+:root {
+  color-scheme: light;
+  --brand-lime: #A3CA39; --brand-lime-soft: #C2DF71; --brand-leaf: #99BE3A; --brand-charcoal: #2F2F2F; --brand-onyx: #262626; --brand-white: #FFFFFF; --brand-slate: #486D7F;
+
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
+  --text-xs: 0.8125rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.125rem; --text-xl: 1.375rem; --text-2xl: 1.75rem; --text-3xl: 2rem;
+  --text-display-s: 1.375rem; --text-display: 1.75rem; --text-section: 1.125rem; --text-title: 1rem; --text-lead: 1rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms; --dur-short: 200ms; --dur-long: 400ms;
+  --container: 1440px; --gutter: 24px; --grid-gap: 24px; --card-pad: 20px; --gap-columns: 24px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
+  --font-display: "Red Hat Display", "Red Hat Text", ui-sans-serif, sans-serif; --font-body: "Red Hat Text", ui-sans-serif, system-ui, sans-serif;
+  --font-outlier: "Red Hat Mono", ui-monospace, monospace;
+  --radius-card: 10px; --radius-entry: 14px; --radius-pill: 6px; --radius-control: 6px; --rule-hair: 1px;
+  --shadow-card: none;
+  --shadow-pop: 0 1px 1px oklch(23% 0 0 / 0.1), 0 2px 4px -1px oklch(23% 0 0 / 0.1), 0 24px 44px -20px oklch(23% 0 0 / 0.4);
+  --key-lit: inset 0 1px 0 var(--brand-white), 0 1px 1px oklch(88% 0.005 120);
+  --key-lit-accent: inset 0 1px 0 oklch(100% 0 0 / 0.35), inset 0 -1px 0 oklch(23% 0 0 / 0.12);
+  --tracking-display: -0.035em; --display-weight: 600;
+
+  /* Surfaces: a near-white canvas, white cards, charcoal chrome */
+  --color-paper: oklch(97.6% 0.004 120); --color-paper-2: var(--brand-white); --color-paper-3: oklch(95% 0.006 120); --color-paper-4: oklch(96.3% 0.006 120);
+  --color-ink: var(--brand-onyx); --color-ink-2: var(--brand-charcoal); --color-muted: oklch(45% 0.006 120);
+  --color-rule: oklch(90.5% 0.005 120); --color-rule-2: oklch(82% 0.008 120); --color-grid: oklch(93.5% 0.006 120);
+  /* Brand lime: fills carry charcoal text; marks on white use the deep leaf */
+  --color-accent: #5B7A1A; --color-accent-fill: var(--brand-lime); --color-accent-fill-hover: var(--brand-leaf);
+  --color-accent-ink: var(--brand-onyx); --color-accent-soft: oklch(95% 0.05 122); --color-focus: #5B7A1A;
+  /* Slate blue: the second chart series and instrument readings */
+  --color-accent-2: var(--brand-slate); --color-accent-2-soft: oklch(94% 0.018 230);
+  --color-cool: var(--brand-slate); --color-cool-soft: oklch(94% 0.018 230);
+  /* Status, kept apart from the brand lime: emerald gains, coral losses, amber warnings */
+  --color-ok: oklch(46% 0.11 162); --color-ok-soft: oklch(94% 0.035 162);
+  --color-bad: oklch(52% 0.17 25); --color-bad-soft: oklch(94.5% 0.03 25);
+  --color-warn: oklch(50% 0.11 70); --color-warn-soft: oklch(94.5% 0.045 85);
+  --color-error: var(--color-bad); --color-success: var(--color-ok);
+  /* Position distribution: emerald, brand lime, slate, then two slate tints */
+  --pos-1: oklch(52% 0.12 162); --pos-2: var(--brand-lime); --pos-3: var(--brand-slate); --pos-4: oklch(72% 0.04 230); --pos-5: oklch(87% 0.016 230);
+  --color-scrim: oklch(23% 0 0 / 0.45);
+  /* Categorical series for shares (device split): lime, slate, then two neutrals */
+  --series-1: var(--brand-lime); --series-2: var(--brand-slate); --series-3: oklch(70% 0.008 120); --series-4: var(--brand-charcoal);
+  /* Charcoal surfaces: the sidebar and the sign-in story panel */
+  --login-ground: var(--brand-onyx); --login-text: var(--brand-white); --login-muted: oklch(82% 0.004 120); --login-rule: oklch(38% 0.003 120);
+  /* Contour field on the sign-in panel: faint charcoal lines, every fifth in brand lime */
+  --contour-minor: oklch(36% 0.004 120 / 0.55); --contour-major: oklch(80% 0.17 125 / 0.32);
+  --contour-mask: linear-gradient(100deg, transparent 0%, oklch(0% 0 0 / 0.55) 35%, oklch(0% 0 0) 75%);
+  /* The same field, light, behind the dashboard canvas; it fades out down the screen so tables sit on clean paper */
+  --backdrop-minor: oklch(86% 0.006 120 / 0.8); --backdrop-major: oklch(74% 0.14 125 / 0.45);
+  --backdrop-mask: linear-gradient(to bottom, oklch(0% 0 0) 0%, oklch(0% 0 0 / 0.6) 45%, transparent 85%);
+  --skeleton: oklch(93% 0.005 120); --skeleton-hi: oklch(97% 0.003 120);
+
+  /* Ramps behind the app's Tailwind colour names */
+  --gray-50: oklch(98% 0.003 120); --gray-100: oklch(95% 0.006 120); --gray-200: oklch(90.5% 0.005 120); --gray-300: oklch(82% 0.008 120);
+  --gray-400: oklch(56% 0.006 120); --gray-500: oklch(49% 0.006 120); --gray-600: oklch(45% 0.006 120); --gray-700: oklch(36% 0.004 120);
+  --gray-800: var(--brand-charcoal); --gray-900: var(--brand-onyx); --gray-950: oklch(17% 0 0);
+  --blue-50: oklch(97% 0.01 230); --blue-100: oklch(94% 0.018 230); --blue-200: oklch(87% 0.03 230); --blue-300: oklch(77% 0.045 230);
+  --blue-400: oklch(64% 0.055 230); --blue-500: var(--brand-slate); --blue-600: var(--brand-slate); --blue-700: oklch(43% 0.05 230);
+  --blue-800: oklch(36% 0.045 230); --blue-900: oklch(29% 0.035 230); --blue-950: oklch(22% 0.025 230);
+  --razza-50: oklch(97% 0.03 122); --razza-100: oklch(95% 0.05 122); --razza-200: var(--brand-lime-soft); --razza-300: var(--brand-lime);
+  --razza-400: #4E6B16; --razza-500: var(--brand-lime); --razza-600: #4E6B16; --razza-700: oklch(40% 0.09 128);
+  --razza-800: oklch(34% 0.08 128); --razza-900: oklch(30% 0.06 125); --razza-950: oklch(24% 0.04 125);
+}
+
+.dark {
+  color-scheme: dark;
+  --color-paper: var(--brand-onyx); --color-paper-2: var(--brand-charcoal); --color-paper-3: oklch(19.5% 0 0); --color-paper-4: oklch(33% 0.003 120);
+  --color-ink: oklch(97% 0.003 120); --color-ink-2: oklch(88% 0.004 120); --color-muted: oklch(76% 0.005 120);
+  --color-rule: oklch(36% 0.003 120); --color-rule-2: oklch(46% 0.004 120); --color-grid: oklch(31% 0.003 120);
+  --color-accent: var(--brand-lime); --color-accent-fill: var(--brand-lime); --color-accent-fill-hover: var(--brand-lime-soft);
+  --color-accent-ink: var(--brand-onyx); --color-accent-soft: oklch(33% 0.05 125); --color-focus: var(--brand-lime-soft);
+  --color-accent-2: oklch(70% 0.055 230); --color-accent-2-soft: oklch(31% 0.03 230);
+  --color-cool: oklch(74% 0.05 230); --color-cool-soft: oklch(31% 0.03 230);
+  --color-ok: oklch(76% 0.13 162); --color-ok-soft: oklch(30% 0.05 162);
+  --color-bad: oklch(74% 0.14 25); --color-bad-soft: oklch(31% 0.05 25);
+  --color-warn: oklch(82% 0.11 78); --color-warn-soft: oklch(31% 0.04 75);
+  --pos-1: oklch(66% 0.12 162); --pos-2: var(--brand-lime); --pos-3: oklch(62% 0.055 230); --pos-4: oklch(48% 0.045 230); --pos-5: oklch(38% 0.03 230);
+  --color-scrim: oklch(10% 0 0 / 0.6);
+  --series-2: oklch(66% 0.06 230); --series-3: oklch(56% 0.006 120); --series-4: oklch(86% 0.004 120);
+  --login-ground: oklch(19.5% 0 0);
+  --backdrop-minor: oklch(34% 0.004 120 / 0.8); --backdrop-major: oklch(62% 0.12 125 / 0.35);
+  --skeleton: oklch(33% 0.003 120); --skeleton-hi: oklch(37% 0.003 120);
+  --key-lit: inset 0 1px 0 oklch(100% 0 0 / 0.06), 0 1px 1px oklch(0% 0 0 / 0.3);
+  --razza-300: var(--brand-lime-soft); --razza-400: var(--brand-lime-soft); --razza-600: var(--brand-lime); --razza-900: oklch(33% 0.05 125); --razza-950: oklch(28% 0.04 125);
+}
+
+/* The sidebar is Header Charcoal in both modes: the same token names, scoped */
+.app-sidebar {
+  --color-paper: var(--brand-charcoal); --color-paper-2: var(--brand-charcoal); --color-paper-3: var(--brand-onyx); --color-paper-4: oklch(35% 0.003 120);
+  --color-ink: var(--brand-white); --color-ink-2: oklch(90% 0.004 120); --color-muted: oklch(78% 0.005 120);
+  --color-rule: oklch(38% 0.003 120); --color-rule-2: oklch(46% 0.004 120); --color-focus: var(--brand-lime-soft);
+  --color-accent-soft: oklch(35% 0.05 125);
+}
