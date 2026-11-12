@@ -12,7 +12,7 @@ export async function api<T>(
   const data = await response
     .json()
     .catch(() => ({
-      error: "Server unavailable. Start the Worker with npm run dev:server.",
+      error: `The server is busy (${response.status}). Try again in a moment.`,
     }));
   if (!response.ok)
     throw new Error(data.error || `Request failed (${response.status}).`);

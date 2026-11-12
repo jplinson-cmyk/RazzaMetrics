@@ -425,14 +425,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!active.length || !currentId) return;
     // One "process jobs" call at a time: each call now works for up to ~25 s, so overlapping calls only waste quota.
     let processing = false;
+    // Reload the page data only after a round of work finishes: reloading every tick re-sent every stored record each time.
     const timer = window.setInterval(() => {
-      void reload();
       if (processing) return;
       processing = true;
       void projectApi(currentId, "jobs/process", "POST")
         .catch((e) => setError(e.message))
         .finally(() => {
           processing = false;
+          void reload();
         });
     }, 5000);
     return () => clearInterval(timer);

@@ -158,7 +158,6 @@ export interface PageSpeedResult {
   labTbt?: number | null;
   /** Which real-visitor data was used: this page, or the whole site when the page has too few visits. */
   fieldScope?: "page" | "site" | null;
-  lighthouseJson?: string;
   testedAt: string;
 }
 
