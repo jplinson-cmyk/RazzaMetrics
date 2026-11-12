@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { TrackedKeyword } from "../../types/seo";
 import { syncKeywordPerformance } from "../../services/searchConsole";
+import { MonthFilter, monthsIn } from "../explorer/MonthFilter";
 
 export const KeywordRanking: React.FC = () => {
   const {
@@ -55,17 +56,21 @@ export const KeywordRanking: React.FC = () => {
   const [isSyncingGsc, setIsSyncingGsc] = useState(false);
   const [gscNotice, setGscNotice] = useState<string | null>(null);
 
-  const top3 = keywords.filter((k) => k.currentRank <= 3).length;
-  const top10 = keywords.filter(
-    (k) => k.currentRank > 3 && k.currentRank <= 10,
-  ).length;
-  const top20 = keywords.filter(
-    (k) => k.currentRank > 10 && k.currentRank <= 20,
-  ).length;
-  const top50 = keywords.filter(
-    (k) => k.currentRank > 20 && k.currentRank <= 50,
-  ).length;
-  const top100 = keywords.filter((k) => k.currentRank > 50).length;
+  // The breakdown has its own month: each keyword's last recorded position in that month.
+  const [rankMonth, setRankMonth] = useState("");
+  const rankMonths = monthsIn(keywords.flatMap((k) => k.historyDates || []));
+  const ranks = keywords
+    .map((k) => {
+      if (!rankMonth) return k.currentRank;
+      const i = (k.historyDates || []).map((d) => d.startsWith(rankMonth)).lastIndexOf(true);
+      return i < 0 ? NaN : k.history[i];
+    })
+    .filter(Number.isFinite);
+  const top3 = ranks.filter((r) => r <= 3).length;
+  const top10 = ranks.filter((r) => r > 3 && r <= 10).length;
+  const top20 = ranks.filter((r) => r > 10 && r <= 20).length;
+  const top50 = ranks.filter((r) => r > 20 && r <= 50).length;
+  const top100 = ranks.filter((r) => r > 50).length;
 
   const filteredKeywords = keywords.filter(
     (k) =>
@@ -208,9 +213,12 @@ export const KeywordRanking: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* SERP Distribution */}
         <div className="tool-panel lg:col-span-5 p-4">
-          <h3 className="font-heading font-bold text-sm text-gray-900 dark:text-white mb-3">
-            Position Breakdown
-          </h3>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="font-heading font-bold text-sm text-gray-900 dark:text-white">
+              Position Breakdown
+            </h3>
+            {rankMonths.length > 0 && <MonthFilter value={rankMonth} onChange={setRankMonth} months={rankMonths} allLabel="Latest" />}
+          </div>
           <RankingDistributionBar
             top3={top3}
             top10={top10}

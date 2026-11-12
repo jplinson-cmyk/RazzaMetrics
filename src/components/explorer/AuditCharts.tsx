@@ -1,18 +1,23 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useProject } from "../../context/ProjectContext";
 import { auditSeverity, vitalRating } from "../../services/explorer";
 import { display } from "../../services/measurements";
 import { ScoreLine, StackedBars } from "./charts";
 import { WidgetState } from "./ui";
+import { MonthFilter, monthsIn } from "./MonthFilter";
 
 const RATING = { good: "Good", improve: "Needs improvement", poor: "Poor", none: "No field data" } as const;
 
 /** Findings per audit over time, and PageSpeed performance with the latest Core Web Vitals. */
 export const AuditCharts: React.FC = () => {
   const { snapshot } = useProject();
-  const audits = useMemo(() => auditSeverity(snapshot?.audits || [], snapshot?.findings || []), [snapshot]);
+  const [auditMonth, setAuditMonth] = useState("");
+  const [speedMonth, setSpeedMonth] = useState("");
+  const allAudits = useMemo(() => auditSeverity(snapshot?.audits || [], snapshot?.findings || []), [snapshot]);
+  const audits = auditMonth ? allAudits.filter((a) => a.date.startsWith(auditMonth)) : allAudits;
+  const speedMonths = useMemo(() => monthsIn((snapshot?.pagespeed || []).map((r) => r.testedAt)), [snapshot]);
   const speed = useMemo(() => {
-    const runs = snapshot?.pagespeed || [];
+    const runs = (snapshot?.pagespeed || []).filter((r) => !speedMonth || r.testedAt.startsWith(speedMonth));
     // Trend one URL: the one tested most often (usually the home page).
     const counts = new Map<string, number>();
     for (const r of runs) counts.set(r.url, (counts.get(r.url) || 0) + 1);
@@ -26,7 +31,7 @@ export const AuditCharts: React.FC = () => {
     })).filter((s) => s.points.length);
     const latest = [...mine].reverse().find((r) => r.strategy === "mobile") ?? mine[mine.length - 1];
     return { url, series, latest };
-  }, [snapshot]);
+  }, [snapshot, speedMonth]);
 
   return (
     <div className="explorer">
@@ -38,8 +43,11 @@ export const AuditCharts: React.FC = () => {
             <span><span className="swatch seg-warning-bg" aria-hidden="true" /> Warnings</span>
             <span><span className="swatch seg-notice-bg" aria-hidden="true" /> Notices</span>
           </span>
+          <MonthFilter value={auditMonth} onChange={setAuditMonth} months={monthsIn(allAudits.map((a) => a.date))} allLabel="All audits" />
         </header>
-        {audits.length ? <StackedBars audits={audits} /> : (
+        {audits.length ? <StackedBars audits={audits} /> : auditMonth ? (
+          <WidgetState kind="empty" title="No audits in this month" body="Pick another month or All audits." />
+        ) : (
           <WidgetState kind="empty" title="No completed site audits yet" body="Run a crawl to record the first audit; each later audit adds a column here." />
         )}
       </section>
@@ -48,6 +56,7 @@ export const AuditCharts: React.FC = () => {
         <header className="card-head">
           <h2 id="speed-title">PageSpeed performance</h2>
           {speed.url && <span className="card-meta mono" title={speed.url}>{speed.url}</span>}
+          <MonthFilter value={speedMonth} onChange={setSpeedMonth} months={speedMonths} allLabel="All tests" />
         </header>
         {speed.series.length ? (
           <>
@@ -84,7 +93,7 @@ export const AuditCharts: React.FC = () => {
             )}
           </>
         ) : (
-          <WidgetState kind="empty" title="No PageSpeed tests yet" body="Run a PageSpeed test below; each later test adds a point to this trend." />
+          <WidgetState kind="empty" title={speedMonth ? "No PageSpeed tests in this month" : "No PageSpeed tests yet"} body={speedMonth ? "Pick another month or All tests." : "Run a PageSpeed test below; each later test adds a point to this trend."} />
         )}
       </section>
     </div>

@@ -1,4 +1,6 @@
 import React from "react";
+import { curve } from "../explorer/charts";
+import { ChartTip, MonthFilter, monthsIn } from "../explorer/MonthFilter";
 
 interface RankTrendChartProps {
   data: number[];
@@ -7,125 +9,54 @@ interface RankTrendChartProps {
   height?: number;
 }
 
-export const RankTrendChart: React.FC<RankTrendChartProps> = ({
-  data,
-  keyword = "Rank Trend",
-  labels = [],
-  height = 160,
-}) => {
+/** Average position over time for one keyword (1 at the top), with its own month filter and hover details. */
+export const RankTrendChart: React.FC<RankTrendChartProps> = ({ data, keyword = "Rank Trend", labels = [], height = 160 }) => {
+  const [month, setMonth] = React.useState("");
+  const [hover, setHover] = React.useState<number | null>(null);
   if (!data || data.length < 2) return null;
-
-  const minRank = Math.min(...data);
-  const maxRank = Math.max(...data);
-  // For ranking, lower number (1) is better, so rank 1 should be at the top of the chart!
-  const paddingY = 20;
-  const chartHeight = height - paddingY * 2;
-  const width = 360;
-  const stepX = width / (data.length - 1);
-
-  // Normalize: rank 1 => top (paddingY), higher rank => bottom
-  const rankRange = Math.max(1, maxRank - minRank);
-  const points = data.map((val, idx) => {
-    const x = idx * stepX;
-    // Lower rank = smaller y (higher on screen)
-    const normalized = (val - minRank) / rankRange;
-    const y = paddingY + normalized * chartHeight;
-    return { x, y, val };
-  });
-
-  const svgPath = points.reduce((acc, p, idx) => {
-    return idx === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
-  }, "");
-
-  const areaPath = `${svgPath} L ${width} ${height} L 0 ${height} Z`;
-
+  const all = data.map((val, i) => ({ val, label: labels[i] ?? String(i + 1) }));
+  const months = monthsIn(labels.filter((l) => /^\d{4}-\d{2}/.test(l)));
+  const pts = month ? all.filter((p) => p.label.startsWith(month)) : all;
+  const W = 360, H = height, T = 18, B = 18, L = 8, R = 8;
+  const min = Math.min(...pts.map((p) => p.val)), max = Math.max(...pts.map((p) => p.val));
+  const range = Math.max(1, max - min);
+  const x = (i: number) => L + (pts.length > 1 ? (i / (pts.length - 1)) * (W - L - R) : (W - L - R) / 2);
+  const y = (v: number) => T + ((v - min) / range) * (H - T - B);
+  const line = curve(pts.map((p, i) => [x(i), y(p.val)]));
+  const h = hover === null ? null : pts[hover];
   return (
-    <div className="w-full flex flex-col">
-      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2">
-        <span className="font-semibold text-gray-700 dark:text-gray-300 truncate max-w-[200px]">
-          {keyword}
-        </span>
-        <span className="text-razza-600 dark:text-razza-400 font-bold">
-          Avg. position {data[data.length - 1]}
-        </span>
+    <div className="rank-trend">
+      <div className="rank-trend-head">
+        <span className="rank-trend-name">{keyword}</span>
+        <span className="rank-trend-now">Avg. position {pts[pts.length - 1]?.val ?? "No Data"}</span>
+        {months.length > 0 && <MonthFilter value={month} onChange={(m) => { setMonth(m); setHover(null); }} months={months} allLabel="All dates" />}
       </div>
-
-      <div className="relative w-full overflow-hidden" style={{ height }}>
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-full overflow-visible"
-        >
-          <defs>
-            <linearGradient id="rankGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-cool)" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="var(--color-cool)" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-
-          {/* Background area */}
-          <path d={areaPath} fill="url(#rankGradient)" />
-
-          {/* Guide lines */}
-          <line
-            x1="0"
-            y1={paddingY}
-            x2={width}
-            y2={paddingY}
-            stroke="currentColor"
-            strokeDasharray="3 3"
-            className="text-gray-200 dark:text-dark-border"
-          />
-          <line
-            x1="0"
-            y1={height - paddingY}
-            x2={width}
-            y2={height - paddingY}
-            stroke="currentColor"
-            strokeDasharray="3 3"
-            className="text-gray-200 dark:text-dark-border"
-          />
-
-          {/* Trend line */}
-          <path
-            d={svgPath}
-            fill="none"
-            stroke="var(--color-cool)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Dots */}
-          {points.map((p, idx) => (
-            <g key={idx}>
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r="4.5"
-                fill="var(--color-paper-2)"
-                stroke="var(--color-cool)"
-                strokeWidth="2.5"
-                className="transition-transform duration-150 hover:scale-125"
-              />
-              <text
-                x={p.x}
-                y={p.y - 8}
-                textAnchor="middle"
-                fontSize="10"
-                className="fill-gray-600 dark:fill-gray-300 font-semibold"
-              >
-                #{p.val}
-              </text>
-            </g>
-          ))}
-        </svg>
-      </div>
-
-      {/* Axis labels */}
-      <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-        {labels.map((l, idx) => (
-          <span key={idx}>{l}</span>
-        ))}
+      {pts.length ? (
+        <div className="chart-frame">
+          <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg rank-trend-svg" role="img"
+            aria-label={`${keyword} average position: ${pts.map((p) => `${p.label} ${p.val}`).join(", ")}`}
+            onMouseLeave={() => setHover(null)}
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const px = ((e.clientX - rect.left) / rect.width) * W;
+              setHover(Math.max(0, Math.min(pts.length - 1, Math.round(((px - L) / (W - L - R)) * (pts.length - 1)))));
+            }}>
+            <line className="grid" x1={L} x2={W - R} y1={T} y2={T} />
+            <line className="grid" x1={L} x2={W - R} y1={H - B} y2={H - B} />
+            {h && <line className="crosshair" x1={x(hover!)} x2={x(hover!)} y1={T} y2={H - B} />}
+            <path className="series-alt-solid" d={line} />
+            {pts.map((p, i) => (
+              <circle key={i} className="dot-alt" cx={x(i)} cy={y(p.val)} r={i === hover ? 5.5 : 3.5} />
+            ))}
+          </svg>
+          {h && <ChartTip x={(x(hover!) / W) * 100} title={h.label} rows={[{ label: "Avg. position", value: String(h.val) }]} />}
+        </div>
+      ) : (
+        <p className="chart-loading">No positions recorded in this month.</p>
+      )}
+      <div className="rank-trend-axis">
+        <span>{pts[0]?.label}</span>
+        <span>{pts[pts.length - 1]?.label}</span>
       </div>
     </div>
   );

@@ -106,7 +106,7 @@ export function urlPath(url: string): string {
   }
 }
 
-interface LinkSeen { sourceDomain?: string; firstSeen: string; lastSeen: string }
+export interface LinkSeen { sourceDomain?: string; firstSeen: string; lastSeen: string }
 
 /**
  * New: referring domains first seen inside the period.

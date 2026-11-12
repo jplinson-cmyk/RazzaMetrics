@@ -773,3 +773,26 @@ main.app-main { background: transparent; }
 .dist-seg { border-radius: 3px; }
 .dist-seg:first-child { border-radius: 999px 3px 3px 999px; }
 .dist-seg:last-child { border-radius: 3px 999px 999px 3px; }
+
+/* ---------- Per-chart month filter and hover details ---------- */
+.chart-month { position: relative; display: inline-flex; align-items: center; gap: var(--space-2xs); margin-left: auto; color: var(--color-muted); }
+.chart-month svg { position: absolute; left: var(--space-xs); pointer-events: none; }
+.chart-month select { min-height: 32px; padding: 0 var(--space-lg) 0 calc(var(--space-xs) + 20px); border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-control); background-color: var(--color-paper-2); color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; }
+.chart-month select:hover { border-color: var(--color-muted); }
+.chart-loading { display: grid; place-items: center; min-height: 180px; color: var(--color-muted); font-size: var(--text-sm); }
+.hover-band { fill: var(--color-paper-3); }
+.dot-normal, .dot-opportunity { transition: r var(--dur-short) var(--ease-out), opacity var(--dur-short); cursor: pointer; }
+.scatter-svg:hover .dot-normal:not(.is-hover), .scatter-svg:hover .dot-opportunity:not(.is-hover) { opacity: 0.55; }
+.dot-normal.is-hover, .dot-opportunity.is-hover { stroke: var(--color-ink); stroke-width: 2; }
+.donut-seg { cursor: pointer; transition: opacity var(--dur-short), stroke-width var(--dur-short); }
+.donut-svg.has-hover .donut-seg:not(.is-hover) { opacity: 0.4; }
+.donut-seg.is-hover { stroke-width: 18; }
+.bars-svg, .scatter-svg { cursor: crosshair; }
+.analytics-heading-side { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.rank-trend { display: grid; gap: var(--space-xs); }
+.rank-trend-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); font-size: var(--text-sm); }
+.rank-trend-name { font-weight: 600; color: var(--color-ink); max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-trend-now { color: var(--color-accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rank-trend-svg { color: var(--color-cool); cursor: crosshair; }
+.series-alt-solid { fill: none; stroke: var(--color-accent-2); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
+.rank-trend-axis { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }

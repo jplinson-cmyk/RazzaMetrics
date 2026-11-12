@@ -1,3 +1,4 @@
+import { MonthFilter, monthsIn } from "../explorer/MonthFilter";
 import { ToxicityHistory } from "../common/RecordActions";
 import { ToolInsights } from "../common/ToolInsights";
 import { display } from "../../services/measurements";
@@ -47,11 +48,14 @@ export const ToxicityScore: React.FC = () => {
     result: ToxicityResult;
   } | null>(null);
 
-  const toxicCount = backlinks.filter((b) => b.toxicityScore >= 60).length;
-  const suspiciousCount = backlinks.filter(
+  // The donut has its own month: links first seen in that month.
+  const [donutMonth, setDonutMonth] = useState("");
+  const donutLinks = donutMonth ? backlinks.filter((b) => b.firstSeen?.startsWith(donutMonth)) : backlinks;
+  const toxicCount = donutLinks.filter((b) => b.toxicityScore >= 60).length;
+  const suspiciousCount = donutLinks.filter(
     (b) => b.toxicityScore >= 30 && b.toxicityScore < 60,
   ).length;
-  const cleanCount = backlinks.filter((b) => b.toxicityScore < 30).length;
+  const cleanCount = donutLinks.filter((b) => b.toxicityScore < 30).length;
 
   const disavowedCount = backlinks.filter(
     (b) =>
@@ -202,6 +206,9 @@ export const ToxicityScore: React.FC = () => {
             </span>
           </div>
 
+          <div className="flex justify-end">
+            <MonthFilter value={donutMonth} onChange={setDonutMonth} months={monthsIn(backlinks.map((b) => b.firstSeen))} allLabel="All dates" />
+          </div>
           <div className="py-2">
             <ToxicityDonut
               toxic={toxicCount}

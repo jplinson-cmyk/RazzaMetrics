@@ -1,11 +1,18 @@
 import React from "react";
 import { useProject } from "../../context/ProjectContext";
 import { display } from "../../services/measurements";
+import { MonthFilter, monthsIn } from "../explorer/MonthFilter";
 export const ToolInsights: React.FC<{
   tool: "backlinks" | "toxicity" | "onpage";
 }> = ({ tool }) => {
   const { snapshot, currentProject } = useProject();
-  const links = snapshot?.backlinks || [];
+  // Own month: links first seen in that month, or the newest audit run in that month.
+  const [month, setMonth] = React.useState("");
+  const allLinks = snapshot?.backlinks || [];
+  const links = month ? allLinks.filter((b) => b.firstSeen?.startsWith(month)) : allLinks;
+  const audits = snapshot?.audits || [];
+  const audit = month ? audits.find((a) => (a.completedAt || "").startsWith(month)) : audits[0];
+  const months = tool === "onpage" ? monthsIn(audits.map((a) => a.completedAt)) : monthsIn(allLinks.map((b) => b.firstSeen));
   const assessed = links.filter((b) => b.riskCategory !== "unknown");
   const latest = snapshot?.toxicity[0];
   const groups =
@@ -20,7 +27,7 @@ export const ToolInsights: React.FC<{
                 : "Notices",
           count:
             snapshot?.findings.filter(
-              (f) => f.auditId === snapshot.audits[0]?.id && f.severity === key,
+              (f) => f.auditId === audit?.id && f.severity === key,
             ).length || 0,
         }))
       : ["low", "moderate", "high", "critical", "unknown"].map((key) => ({
@@ -45,10 +52,11 @@ export const ToolInsights: React.FC<{
               : "Imported observations, internal heuristic, not a Google score"}
           </p>
         </div>
-        <span>
+        <span className="analytics-heading-side">
           {tool === "onpage"
-            ? snapshot?.audits[0]?.status || "No audit"
+            ? audit?.status || "No audit"
             : `${assessed.length} / ${links.length} evaluated`}
+          {months.length > 0 && <MonthFilter value={month} onChange={setMonth} months={months} allLabel={tool === "onpage" ? "Latest audit" : "All dates"} />}
         </span>
       </div>
       <div className="premium-two mt-5">

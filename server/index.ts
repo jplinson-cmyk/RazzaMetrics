@@ -377,6 +377,9 @@ async function api(
       country,
       country,
     );
+    // A chart's own month filter only needs the Search Console rows, not every stored object.
+    if (url.searchParams.get("only") === "performance")
+      return json({ performance, previousPerformance, range: { start, end }, truncated: performance.length === 10000 });
     const data = await Promise.all(
       [
         "tracked_keywords",

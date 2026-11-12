@@ -11,12 +11,36 @@ import {
   shareBy,
   topPages,
   urlPath,
-  type DayPoint,
+  type LinkSeen,
 } from "../../services/explorer";
 import type { ActiveTab } from "../layout/Sidebar";
 import { DeltaBadge, SegmentedTabs, Skeleton, Sparkline, Truncate, WidgetState } from "../explorer/ui";
 import { AreaGradient, curve, Donut, HBars } from "../explorer/charts";
+import { MonthFilter, recentMonths, useSearchRows } from "../explorer/MonthFilter";
 import type { PerformanceRow } from "../../services/measurements";
+
+/** Daily points for a range and for the same-length range before it. */
+function daySeries(rows: PerformanceRow[], previous: PerformanceRow[], start: string, end: string) {
+  const length = Math.round((Date.parse(end) - Date.parse(start)) / DAY) + 1;
+  return {
+    days: dailySeries(rows, start, end),
+    prevDays: dailySeries(previous, iso(Date.parse(start) - length * DAY), iso(Date.parse(start) - DAY)),
+  };
+}
+
+/** Average position per keyword, impression-weighted, from raw rows. */
+function keywordPositions(rows: PerformanceRow[]) {
+  const by = new Map<string, PerformanceRow[]>();
+  for (const r of rows) (by.get(r.keyword) ?? by.set(r.keyword, []).get(r.keyword)!).push(r);
+  return [...by.values()].map((g) => aggregate(g).position);
+}
+
+/** Loading or error state while a chart's own month is fetched. */
+function monthState(src: { loading: boolean; error: string }) {
+  if (src.error) return <WidgetState kind="error" title="This month could not load" body={src.error} />;
+  if (src.loading) return <p className="chart-loading" role="status">Loading month…</p>;
+  return null;
+}
 
 const DAY = 86400000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -43,10 +67,8 @@ export const PremiumDashboard: React.FC<{
   const model = useMemo(() => {
     if (!snapshot) return null;
     const length = Math.round((Date.parse(filters.end) - Date.parse(filters.start)) / DAY) + 1;
-    const prevStart = iso(Date.parse(filters.start) - length * DAY);
     const prevEnd = iso(Date.parse(filters.start) - DAY);
     const days = dailySeries(snapshot.performance, filters.start, filters.end);
-    const prevDays = dailySeries(snapshot.previousPerformance, prevStart, prevEnd);
     const cur = aggregate(snapshot.performance);
     const prev = aggregate(snapshot.previousPerformance);
     const queries = (rows: typeof snapshot.performance) => new Set(rows.filter((r) => r.impressions > 0).map((r) => r.keyword)).size;
@@ -56,7 +78,6 @@ export const PremiumDashboard: React.FC<{
     const samples = Array.from({ length: 12 }, (_, i) => iso(Date.parse(filters.start) + (i * (length - 1) * DAY) / 11));
     return {
       days,
-      prevDays,
       hasSearch: snapshot.performance.length > 0,
       hasPrevious: snapshot.previousPerformance.length > 0,
       cur,
@@ -66,11 +87,9 @@ export const PremiumDashboard: React.FC<{
       domainsNow,
       domainsBefore,
       domainSpark: linkDates.some((l) => l.firstSeen) ? samples.map((d) => domainsKnownBy(linkDates, d)) : [],
-      pages: topPages(snapshot.performance, snapshot.previousPerformance),
-      velocity: backlinkVelocity(linkDates, filters.start, filters.end),
-      positions: positionDistribution(organicKeywords.map((k) => k.position)),
+      linkDates,
     };
-  }, [snapshot, filters, backlinks, organicKeywords]);
+  }, [snapshot, filters, backlinks]);
 
   if (!model) {
     return error ? (
@@ -147,26 +166,22 @@ export const PremiumDashboard: React.FC<{
         ))}
       </section>
 
-      <TrendCard days={model.days} prevDays={model.prevDays} hasSearch={model.hasSearch} />
+      <TrendCard />
 
-      <section className="card span-6" aria-labelledby="dist-title">
-        <header className="card-head">
-          <h2 id="dist-title">Keyword position distribution</h2>
-          <span className="card-meta">{organicKeywords.length.toLocaleString()} keywords</span>
-        </header>
-        {organicKeywords.length ? <Distribution buckets={model.positions} /> : (
-          <WidgetState kind="empty" title="No ranking keywords in this period" body="Positions come from Search Console. Widen the timeframe or sync the property." />
-        )}
-      </section>
+      <DistributionCard />
 
-      <BreakdownCard pages={model.pages} velocity={model.velocity} hasLinks={backlinks.length > 0} onNavigate={onNavigateTab} />
+      <BreakdownCard backlinks={model.linkDates} onNavigate={onNavigateTab} />
 
-      <AudienceCards rows={snapshot!.performance} device={filters.device} country={filters.country} />
+      <AudienceCards device={filters.device} country={filters.country} />
     </div>
   );
 };
 
-function TrendCard({ days, prevDays, hasSearch }: { days: DayPoint[]; prevDays: DayPoint[]; hasSearch: boolean }) {
+function TrendCard() {
+  const [month, setMonth] = useState("");
+  const src = useSearchRows(month);
+  const { days, prevDays } = useMemo(() => daySeries(src.rows, src.previous, src.start, src.end), [src.rows, src.previous, src.start, src.end]);
+  const hasSearch = src.rows.length > 0;
   const [metric, setMetric] = useState<"clicks" | "value" | "impressions">("clicks");
   const [show, setShow] = useState({ main: true, footprint: true });
   const [hover, setHover] = useState<number | null>(null);
@@ -226,9 +241,10 @@ function TrendCard({ days, prevDays, hasSearch }: { days: DayPoint[]; prevDays: 
             </button>
           </div>
         )}
+        <MonthFilter value={month} onChange={setMonth} months={recentMonths()} />
       </header>
       <div id="trend-panel" role="tabpanel" aria-labelledby={`trend-tab-${metric}`} className="chart-body">
-        {metric === "value" ? (
+        {monthState(src) ?? (metric === "value" ? (
           <WidgetState kind="empty" title="Traffic value needs cost-per-click data" body="This project stores Search Console clicks and impressions, not CPC, so a value would have to be invented. Connect a CPC source to fill this view." />
         ) : !hasSearch ? (
           <WidgetState kind="empty" title="No search measurements in this period" body="Select a Search Console property in the top bar, sync it, or widen the timeframe." />
@@ -289,8 +305,30 @@ function TrendCard({ days, prevDays, hasSearch }: { days: DayPoint[]; prevDays: 
               </div>
             )}
           </div>
-        )}
+        ))}
       </div>
+    </section>
+  );
+}
+
+function DistributionCard() {
+  const { organicKeywords } = useProject();
+  const [month, setMonth] = useState("");
+  const src = useSearchRows(month);
+  const positions = useMemo(
+    () => (month ? keywordPositions(src.rows) : organicKeywords.map((k) => k.position)),
+    [month, src.rows, organicKeywords],
+  );
+  return (
+    <section className="card span-6" aria-labelledby="dist-title">
+      <header className="card-head">
+        <h2 id="dist-title">Keyword position distribution</h2>
+        <span className="card-meta">{positions.length.toLocaleString()} keywords</span>
+        <MonthFilter value={month} onChange={setMonth} months={recentMonths()} />
+      </header>
+      {monthState(src) ?? (positions.length ? <Distribution buckets={positionDistribution(positions)} /> : (
+        <WidgetState kind="empty" title="No ranking keywords in this period" body="Positions come from Search Console. Pick another month or sync the property." />
+      ))}
     </section>
   );
 }
@@ -322,17 +360,18 @@ function Distribution({ buckets }: { buckets: { label: string; count: number; sh
 }
 
 function BreakdownCard({
-  pages,
-  velocity,
-  hasLinks,
+  backlinks,
   onNavigate,
 }: {
-  pages: ReturnType<typeof topPages>;
-  velocity: ReturnType<typeof backlinkVelocity>;
-  hasLinks: boolean;
+  backlinks: LinkSeen[];
   onNavigate: (tab: ActiveTab) => void;
 }) {
   const [tab, setTab] = useState<"pages" | "velocity">("pages");
+  const [month, setMonth] = useState("");
+  const src = useSearchRows(month);
+  const pages = useMemo(() => topPages(src.rows, src.previous), [src.rows, src.previous]);
+  const velocity = useMemo(() => backlinkVelocity(backlinks, src.start, src.end), [backlinks, src.start, src.end]);
+  const hasLinks = backlinks.length > 0;
   return (
     <section className="card span-6" aria-labelledby="breakdown-title">
       <header className="card-head">
@@ -351,10 +390,11 @@ function BreakdownCard({
         <button type="button" className="card-link" onClick={() => onNavigate(tab === "pages" ? "pages" : "backlinks")}>
           View full report →
         </button>
+        <MonthFilter value={month} onChange={setMonth} months={recentMonths()} />
       </header>
       <div id="breakdown-panel" role="tabpanel" aria-labelledby={`breakdown-tab-${tab}`}>
         {tab === "pages" ? (
-          pages.length ? (
+          monthState(src) ?? (pages.length ? (
             <div className="table-scroll">
             <table className="data-table data-table--full">
               <thead>
@@ -379,7 +419,7 @@ function BreakdownCard({
             </div>
           ) : (
             <WidgetState kind="empty" title="No pages with search traffic yet" body="Pages appear once Search Console returns clicks or impressions for this period." />
-          )
+          ))
         ) : !hasLinks ? (
           <WidgetState kind="empty" title="No backlinks imported" body="Import a backlink CSV in Backlink Profile to track new and lost referring domains." />
         ) : !velocity.dated ? (
@@ -451,30 +491,36 @@ export function TableSkeleton({ rows = 8 }: { rows?: number }) {
 const title = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Where the clicks come from: device split and the top countries, from the same Search Console rows. */
-function AudienceCards({ rows, device, country }: { rows: PerformanceRow[]; device: string; country: string }) {
-  const devices = shareBy(rows, "device");
+function AudienceCards({ device, country }: { device: string; country: string }) {
+  const [deviceMonth, setDeviceMonth] = useState("");
+  const [countryMonth, setCountryMonth] = useState("");
+  const deviceSrc = useSearchRows(deviceMonth);
+  const countrySrc = useSearchRows(countryMonth);
+  const devices = shareBy(deviceSrc.rows, "device");
   // shortcut: Search Console returns ISO alpha-3 codes and the platform has no alpha-3 name table, so codes are shown as-is; add a lookup if names are wanted.
-  const countries = shareBy(rows, "country").slice(0, 8);
-  const empty = <WidgetState kind="empty" title="No search measurements in this period" body="Sync Search Console or widen the timeframe." />;
+  const countries = shareBy(countrySrc.rows, "country").slice(0, 8);
+  const empty = <WidgetState kind="empty" title="No search measurements in this period" body="Sync Search Console or pick another month." />;
   return (
     <>
       <section className="card span-6" aria-labelledby="device-title">
         <header className="card-head">
           <h2 id="device-title">Device split</h2>
           {device && <span className="card-meta">Filtered to {title(device.toLowerCase())}</span>}
+          <MonthFilter value={deviceMonth} onChange={setDeviceMonth} months={recentMonths()} />
         </header>
-        {rows.length ? (
+        {monthState(deviceSrc) ?? (deviceSrc.rows.length ? (
           <Donut label="Device" unit="clicks" parts={devices.map((d) => ({ name: title(d.name), value: d.clicks, share: d.share }))} />
-        ) : empty}
+        ) : empty)}
       </section>
       <section className="card span-6" aria-labelledby="country-title">
         <header className="card-head">
           <h2 id="country-title">Top countries</h2>
           <span className="card-meta">{country ? `Filtered to ${country.toUpperCase()}` : "By clicks"}</span>
+          <MonthFilter value={countryMonth} onChange={setCountryMonth} months={recentMonths()} />
         </header>
-        {rows.length ? (
+        {monthState(countrySrc) ?? (countrySrc.rows.length ? (
           <HBars unit="clicks" rows={countries.map((c) => ({ name: c.name.toUpperCase(), value: c.clicks, note: `${display(c.share)}%` }))} />
-        ) : empty}
+        ) : empty)}
       </section>
     </>
   );
