@@ -34,3 +34,6 @@ dist-ssr
 
 # Local design-tool scratch (old pre-git backup, render captures)
 .hallmark/
+
+# Production admin login written by the deploy; keep it in a password manager, then delete
+.production-login.txt

@@ -1,12 +1,14 @@
 # Cloudflare deployment
 
+Live instance: https://razza-metrics.razza-seo-platform.workers.dev (Worker `razza-metrics`, D1 database `razza-seo`, Workers Free plan).
+
 1. Authenticate Wrangler (`npx wrangler login`) using your own Cloudflare account.
-2. Create D1: `npx wrangler d1 create razza-seo`. Replace the placeholder database_id in `wrangler.jsonc` with the returned ID. Do not point tests at production.
+2. Create D1: `npx wrangler d1 create razza-seo`. Put the returned ID in the `env.production` block of `wrangler.jsonc` (the top-level block stays the local development database). Do not point tests at production.
 3. Back up any existing deployment data before applying migrations. This checkout's new migrations create independent server tables and do not delete browser records. For a preexisting server DB with conflicting table names, reconcile its schema first; do not force-apply a replacement schema.
-4. Apply production migrations: `npx wrangler d1 migrations apply razza-seo --remote`.
-5. Set APP_BASE_URL and GOOGLE_REDIRECT_URI in Wrangler vars to the final HTTPS origin and exact callback URL. Configure ALLOWED_EMAIL_DOMAIN explicitly.
-6. Set secrets with `npx wrangler secret put GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `APP_ENCRYPTION_KEY`. Optionally set GOOGLE_PAGESPEED_API_KEY. Secrets must never be committed.
-7. Run type checks, lint, tests and `npm run build`. Run `npx wrangler deploy --dry-run --outdir .tmp/worker-build` to validate packaging. Deploy only after reviewing the configured account, database and domain: `npm run deploy`.
+4. Apply production migrations: `npx wrangler d1 migrations apply razza-seo --remote --env production`.
+5. Set APP_BASE_URL and GOOGLE_REDIRECT_URI in the `env.production` vars to the final HTTPS origin and exact callback URL. Configure ALLOWED_EMAIL_DOMAIN explicitly.
+6. Set secrets with `npx wrangler secret put <NAME> --env production` for GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and APP_ENCRYPTION_KEY (and MANUAL_ADMIN_USERNAME / MANUAL_ADMIN_PASSWORD_HASH for username login). Optionally set GOOGLE_PAGESPEED_API_KEY. Secrets must never be committed.
+7. Run type checks, lint, tests and `npm run build`. Run `npx wrangler deploy --dry-run --outdir .tmp/worker-build` to validate packaging. Deploy only after reviewing the configured account, database and domain: `npm run deploy` (builds, then runs `wrangler deploy --env production`).
 8. The Worker serves built Vite assets and handles `/api/*` before SPA fallback. Server files are excluded from the browser build.
 9. The cron runs every five minutes. It enqueues stale active GSC projects and processes one leased batch per invocation. Jobs also advance while an authenticated project screen polls. One active job is leased globally to limit concurrency; per-project active keys deduplicate requests. Interrupted leases expire after two minutes; repeated interruption or failures stop after four attempts. Rate-limit failures defer to the next UTC day without consuming the failure allowance.
 10. Verify real OAuth, GSC, manual crawl, PageSpeed and cron behavior in deployment. Check D1/Workers usage in Cloudflare. Infrastructure quotas and API budgets are separate; the app never upgrades a plan.
