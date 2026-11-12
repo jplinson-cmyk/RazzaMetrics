@@ -35,6 +35,7 @@ import {
   scheduled,
 } from "./jobs";
 import { settings, settingsSchema } from "./settings";
+import { PERF_COLUMNS } from "../src/services/measurements";
 
 export async function authorizedProject(env: Env, userId: string, id: string) {
   const p = await stmt(
@@ -355,9 +356,11 @@ async function api(
       .slice(0, 10);
     const device = url.searchParams.get("device") || "";
     const country = url.searchParams.get("country") || "";
-    const performance = await rows<Record<string, unknown>>(
+    // Rows go out as compact arrays with only the columns the charts read: a large site sends
+    // tens of thousands of them, and building objects for each ran past the free plan's CPU limit.
+    const performance = await stmt(
       env,
-      "SELECT * FROM gsc_performance WHERE project_id=? AND date>=? AND date<=? AND (?='' OR device=?) AND (?='' OR country=?) ORDER BY date DESC LIMIT 10000",
+      `SELECT ${PERF_COLUMNS.join(",")} FROM gsc_performance WHERE project_id=? AND date>=? AND date<=? AND (?='' OR device=?) AND (?='' OR country=?) ORDER BY date DESC LIMIT 10000`,
       p.id,
       start,
       end,
@@ -365,10 +368,11 @@ async function api(
       device,
       country,
       country,
-    );
-    const previousPerformance = await rows<Record<string, unknown>>(
+    ).raw();
+    // The previous period is only compared by keyword, page and day, so devices and countries are combined in SQL.
+    const previousPerformance = await stmt(
       env,
-      "SELECT * FROM gsc_performance WHERE project_id=? AND date>=? AND date<=? AND (?='' OR device=?) AND (?='' OR country=?) ORDER BY date DESC LIMIT 10000",
+      "SELECT keyword,page,date,'' AS device,'' AS country,SUM(clicks),SUM(impressions),CASE WHEN SUM(impressions)>0 THEN SUM(position*impressions)/SUM(impressions) ELSE AVG(position) END FROM gsc_performance WHERE project_id=? AND date>=? AND date<=? AND (?='' OR device=?) AND (?='' OR country=?) GROUP BY keyword,page,date ORDER BY date DESC LIMIT 10000",
       p.id,
       previousStart,
       previousEnd,
@@ -376,7 +380,7 @@ async function api(
       device,
       country,
       country,
-    );
+    ).raw();
     // A chart's own month filter only needs the Search Console rows, not every stored object.
     if (url.searchParams.get("only") === "performance")
       return json({ performance, previousPerformance, range: { start, end }, truncated: performance.length === 10000 });

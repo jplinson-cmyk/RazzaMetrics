@@ -3,7 +3,7 @@ import { Download, Printer, X } from "lucide-react";
 import { useProject } from "../../context/ProjectContext";
 import { projectApi } from "../../services/api";
 import { exportToCsv } from "../../utils/csvExport";
-import { aggregate, display, type PerformanceRow } from "../../services/measurements";
+import { aggregate, display, unpackRows, type PerformanceRow } from "../../services/measurements";
 import { backlinkVelocity, delta, topPages, urlPath } from "../../services/explorer";
 import { DeltaBadge } from "../explorer/ui";
 import { Logo } from "../brand/Logo";
@@ -42,7 +42,7 @@ export const MonthlyReportModal: React.FC<{ isOpen: boolean; onClose: () => void
     setGa4(null);
     setGa4Error("");
     const data = (r: { start: string; end: string }) =>
-      projectApi<{ performance: PerformanceRow[] }>(currentProject.id, `data?start=${r.start}&end=${r.end}`).then((d) => d.performance);
+      projectApi<{ performance: PerformanceRow[] }>(currentProject.id, `data?start=${r.start}&end=${r.end}&only=performance`).then((d) => unpackRows(d.performance));
     Promise.all([data(range), data(prevRange)])
       .then(([cur, prev]) => alive && setRows({ cur, prev }))
       .catch((e) => alive && setError(e.message));

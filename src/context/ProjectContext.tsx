@@ -19,7 +19,7 @@ import type {
   PageSpeedResult,
 } from "../db/schema";
 import { api, projectApi } from "../services/api";
-import { aggregate, PerformanceRow } from "../services/measurements";
+import { aggregate, PerformanceRow, unpackRows } from "../services/measurements";
 import { useAuth } from "./AuthContext";
 interface ProjectRow {
   id: string;
@@ -350,6 +350,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({
       );
       if (gen !== generation.current || currentId !== currentRef.current)
         return;
+      result.performance = unpackRows(result.performance);
+      result.previousPerformance = unpackRows(result.previousPerformance);
       setSnapshot(result);
       setError(
         result.truncated

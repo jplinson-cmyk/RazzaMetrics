@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { useProject } from "../../context/ProjectContext";
 import { projectApi } from "../../services/api";
-import type { PerformanceRow } from "../../services/measurements";
+import { unpackRows, type PerformanceRow } from "../../services/measurements";
 
 /** "2026-10" → first and last day of that month. */
 export function monthRange(month: string) {
@@ -60,7 +60,7 @@ export function useSearchRows(month: string) {
     const { start, end } = monthRange(month);
     const q = new URLSearchParams({ start, end, device: filters.device, country: filters.country, only: "performance" });
     projectApi<{ performance: PerformanceRow[]; previousPerformance: PerformanceRow[] }>(currentProject.id, `data?${q}`)
-      .then((d) => alive && setFetched({ key, rows: d.performance, previous: d.previousPerformance }))
+      .then((d) => alive && setFetched({ key, rows: unpackRows(d.performance), previous: unpackRows(d.previousPerformance) }))
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;

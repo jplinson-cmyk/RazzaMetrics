@@ -13,7 +13,7 @@ import {
   crawlPage,
 } from "../server/crawler";
 import { parseBacklinkCsv, importCsv, recalculate } from "../server/backlinks";
-import { aggregate } from "../src/services/measurements";
+import { aggregate, unpackRows } from "../src/services/measurements";
 import { abbreviate, auditSeverity, backlinkVelocity, countBy, dailySeries, delta, movers, positionDistribution, shareBy, topPages, vitalRating, weeklyVelocity } from "../src/services/explorer";
 import { scoreBacklink } from "../src/services/toxicityEngine";
 import { enqueue, runJobs } from "../server/jobs";
@@ -92,6 +92,9 @@ function adapter(db: DatabaseSync) {
           results: db.prepare(query).all(...(args as [])),
           success: true,
         };
+      },
+      async raw() {
+        return db.prepare(query).all(...(args as [])).map((r) => Object.values(r as object));
       },
       async run() {
         const r = db.prepare(query).run(...(args as []));
@@ -301,6 +304,16 @@ describe("authentication and authorization", () => {
     await expect(authorizedProject(env, "u1", "p2")).rejects.toThrow(
       "Project not found",
     );
+  });
+  it("sends search rows compactly, with the previous period merged across devices and countries", async () => {
+    const add = sql.prepare("INSERT INTO gsc_performance VALUES(?,?,?,?,?,?,?,?,?,?,?)");
+    add.run("g1", "p1", "seo", "https://example.com/", "2026-03-10", "MOBILE", "usa", 5, 100, 4, "x");
+    add.run("g2", "p1", "seo", "https://example.com/", "2026-02-10", "MOBILE", "usa", 1, 10, 2, "x");
+    add.run("g3", "p1", "seo", "https://example.com/", "2026-02-10", "DESKTOP", "phl", 3, 30, 6, "x");
+    const d = await (await request("/projects/p1/data?start=2026-03-01&end=2026-03-31&only=performance")).json() as { performance: unknown[][]; previousPerformance: unknown[][] };
+    expect(unpackRows(d.performance as never)).toEqual([{ keyword: "seo", page: "https://example.com/", date: "2026-03-10", device: "MOBILE", country: "usa", clicks: 5, impressions: 100, position: 4 }]);
+    // 10 impressions at position 2 and 30 at position 6 average to 5, weighted by impressions.
+    expect(unpackRows(d.previousPerformance as never)).toEqual([{ keyword: "seo", page: "https://example.com/", date: "2026-02-10", device: "", country: "", clicks: 4, impressions: 40, position: 5 }]);
   });
   it("rejects CSRF, including logout", async () => {
     expect(
