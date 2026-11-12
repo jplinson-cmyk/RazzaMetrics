@@ -115,6 +115,9 @@ export interface ProjectDomain {
   referringDomainsCount: number;
   overallToxicityScore: number; // 0-100
   gscProperty?: string;
+  ga4Property?: string;
+  /** Optional client or job code, e.g. RZ-104. */
+  code?: string;
   lastSyncDate?: string;
   lastAuditDate?: string;
 }

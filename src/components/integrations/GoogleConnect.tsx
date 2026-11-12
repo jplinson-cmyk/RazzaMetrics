@@ -1,7 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { listProperties, GscSite } from "../../services/searchConsole";
 import { disconnectGoogle } from "../../services/googleAuth";
+import { api } from "../../services/api";
 import { useProject } from "../../context/ProjectContext";
+
+interface Ga4Property {
+  property: string;
+  displayName: string;
+  account: string;
+}
+
+/**
+ * Google for one site. Linking normally happens on its own (when a site is added, and right after
+ * Google is connected); this panel shows the result and lets you link now or pick by hand.
+ */
 export const GoogleConnect: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -9,86 +21,142 @@ export const GoogleConnect: React.FC<{
   currentGscProperty?: string;
   onPropertySelected: (property: string) => void;
 }> = ({ isOpen, onClose, projectId, currentGscProperty }) => {
-  const { updateProject, reload } = useProject();
-  const [properties, setProperties] = useState<GscSite[]>([]);
-  const [selected, setSelected] = useState(currentGscProperty || "");
+  const { updateProject, reload, linkGoogle, currentProject } = useProject();
+  const [gscSites, setGscSites] = useState<GscSite[]>([]);
+  const [ga4, setGa4] = useState<Ga4Property[]>([]);
+  const [gscSelected, setGscSelected] = useState(currentGscProperty || "");
+  const [ga4Selected, setGa4Selected] = useState(currentProject.ga4Property || "");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
-    setSelected(currentGscProperty || "");
+    setGscSelected(currentGscProperty || "");
+    setGa4Selected(currentProject.ga4Property || "");
     setError("");
-    setLoading(true);
-    listProperties()
-      .then(setProperties)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [isOpen, projectId, currentGscProperty]);
+    setNotice("");
+    setBusy(true);
+    Promise.allSettled([listProperties(), api<Ga4Property[]>("/google/analytics-properties")])
+      .then(([sites, props]) => {
+        if (sites.status === "fulfilled") setGscSites(sites.value);
+        if (props.status === "fulfilled") setGa4(props.value);
+        const failed = [sites, props].find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+        if (failed) setError(failed.reason?.message || "Could not read your Google properties.");
+      })
+      .finally(() => setBusy(false));
+  }, [isOpen, projectId, currentGscProperty, currentProject.ga4Property]);
+
   if (!isOpen) return null;
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-2xl shadow-2xl p-6 space-y-5">
-        <h2 className="font-heading font-bold dark:text-white">
-          Google Search Console
-        </h2>
-        <p className="text-xs text-gray-500">
-          Choose a property you can access. Property permission and website
-          matching are checked on the server. Saving starts historical
-          synchronization.
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="google-panel" role="dialog" aria-modal="true" aria-labelledby="google-title" onClick={(e) => e.stopPropagation()}>
+        <h2 id="google-title">Google for {currentProject.domain}</h2>
+        <p className="google-lede">
+          Sites verified in your Google account link automatically when you add them. Use the button below for sites added before Google was connected.
         </p>
-        {loading && <p role="status">Loading properties…</p>}
-        {error && (
-          <p role="alert" className="text-xs text-rose-500">
-            {error}
-          </p>
-        )}
-        <select
-          aria-label="Search Console property"
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          className="w-full p-3 rounded-xl border dark:bg-dark-surface dark:text-white"
+
+        <dl className="google-status">
+          <div>
+            <dt>Search Console</dt>
+            <dd>{currentProject.gscProperty || "Not linked"}</dd>
+          </div>
+          <div>
+            <dt>Google Analytics</dt>
+            <dd>{ga4.find((g) => g.property === currentProject.ga4Property)?.displayName || currentProject.ga4Property || "Not linked"}</dd>
+          </div>
+        </dl>
+
+        <button
+          type="button"
+          className="login-key login-key--primary"
+          disabled={busy || !projectId}
+          onClick={() =>
+            run(async () => {
+              const linked = await linkGoogle();
+              setNotice(
+                linked.gscProperty || linked.ga4Property
+                  ? `Linked ${[linked.gscProperty && "Search Console", linked.ga4Property && "Analytics"].filter(Boolean).join(" and ")}.`
+                  : "Nothing new to link. Either it is already linked, or this Google account has no verified property for this domain.",
+              );
+            })
+          }
         >
-          <option value="">Select a verified property</option>
-          {properties
-            .filter((p) => p.permissionLevel !== "siteUnverifiedUser")
-            .map((p) => (
-              <option key={p.siteUrl}>{p.siteUrl}</option>
-            ))}
-        </select>
-        <div className="flex flex-wrap gap-3 text-xs">
-          <a
-            className="text-blue-600 underline"
-            href={"/api/auth/login?project=" + encodeURIComponent(projectId)}
+          {busy ? "Working…" : "Link automatically"}
+        </button>
+        {notice && <p role="status" className="google-notice">{notice}</p>}
+        {error && <p role="alert" className="login-error">{error}</p>}
+
+        <details className="google-manual">
+          <summary>Choose properties manually</summary>
+          <label className="google-field">
+            <span>Search Console property</span>
+            <select value={gscSelected} onChange={(e) => setGscSelected(e.target.value)}>
+              <option value="">Not linked</option>
+              {gscSites
+                .filter((p) => p.permissionLevel !== "siteUnverifiedUser")
+                .map((p) => (
+                  <option key={p.siteUrl}>{p.siteUrl}</option>
+                ))}
+            </select>
+          </label>
+          <label className="google-field">
+            <span>Google Analytics 4 property</span>
+            <select value={ga4Selected} onChange={(e) => setGa4Selected(e.target.value)}>
+              <option value="">Not linked</option>
+              {ga4.map((g) => (
+                <option key={g.property} value={g.property}>
+                  {g.displayName} ({g.account})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={busy || !projectId}
+            onClick={() =>
+              run(async () => {
+                await updateProject({ gscProperty: gscSelected, ga4Property: ga4Selected });
+                onClose();
+              })
+            }
           >
-            Connect / reconnect Google
+            Save properties
+          </button>
+        </details>
+
+        <div className="google-foot">
+          <a className="card-link" href={"/api/auth/login?project=" + encodeURIComponent(projectId)}>
+            Connect or reconnect Google
           </a>
           <button
-            onClick={async () => {
-              try {
+            type="button"
+            className="card-link"
+            onClick={() =>
+              run(async () => {
                 await disconnectGoogle(projectId);
                 await reload();
                 onClose();
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
+              })
+            }
           >
             Disconnect account
           </button>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button className="p-2 text-gray-500" onClick={onClose}>
+          <button type="button" className="btn-secondary" onClick={onClose}>
             Close
-          </button>
-          <button
-            disabled={!selected || !projectId}
-            className="px-4 py-2 bg-razza-500 text-white rounded-xl disabled:opacity-50"
-            onClick={async () => {
-              await updateProject({ gscProperty: selected });
-              onClose();
-            }}
-          >
-            Save property
           </button>
         </div>
       </div>

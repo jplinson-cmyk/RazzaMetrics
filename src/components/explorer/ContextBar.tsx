@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useProject } from "../../context/ProjectContext";
 import { navItems, type ActiveTab } from "../layout/Sidebar";
 import { SegmentedTabs } from "./ui";
+import { DateRange } from "./DateRange";
 
 const TIMEFRAMES = [
   { value: "7", label: "7d" },
@@ -76,13 +77,14 @@ export const ContextBar: React.FC<{ activeTab: ActiveTab; onNavigate: (tab: Acti
         <SegmentedTabs
           label="Timeframe"
           value={timeframe}
-          options={[...TIMEFRAMES, ...(timeframe === "custom" ? [{ value: "custom", label: `${span}d` }] : [])]}
+          options={[...TIMEFRAMES]}
           onChange={(v) => {
-            if (v === "custom") return;
-            const end = Date.parse(filters.end) || Date.now();
-            setFilters((f) => ({ ...f, start: iso(end - (Number(v) - 1) * 86400000) }));
+            // Presets always end today; other ranges come from the date button.
+            const end = Date.now();
+            setFilters((f) => ({ ...f, start: iso(end - (Number(v) - 1) * 86400000), end: iso(end) }));
           }}
         />
+        <DateRange start={filters.start} end={filters.end} onApply={(start, end) => setFilters((f) => ({ ...f, start, end }))} />
         <span className={`updating-pill ${refreshing ? "is-on" : ""}`} role="status" aria-live="polite">
           {refreshing ? "Updating analytics…" : ""}
         </span>

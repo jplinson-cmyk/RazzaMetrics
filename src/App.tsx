@@ -7,7 +7,7 @@ import { Navbar } from "./components/layout/Navbar";
 import { Sidebar, ActiveTab, navItems } from "./components/layout/Sidebar";
 import { MobileNav } from "./components/layout/MobileNav";
 import { LoginModal } from "./components/auth/LoginModal";
-import { WeeklyReportModal } from "./components/email/WeeklyReportModal";
+import { MonthlyReportModal } from "./components/email/MonthlyReportModal";
 import { SiteManagerModal } from "./components/sites/SiteManagerModal";
 
 // Tools
@@ -106,23 +106,7 @@ const MainLayout: React.FC = () => {
               </button>
             </div>
 
-            {currentProject.id ? (
-              <details className="setup-fold">
-                <summary className="text-sm font-semibold">
-                  Date range, filters & project setup{" "}
-                  <span className="text-xs font-normal text-slate-500">
-                    — adjust your reporting period
-                  </span>
-                </summary>
-                <div className="mt-4">
-                  <ProjectStatus
-                    onAddProject={() => setIsSiteManagerOpen(true)}
-                  />
-                </div>
-              </details>
-            ) : (
-              <ProjectStatus onAddProject={() => setIsSiteManagerOpen(true)} />
-            )}
+            <ProjectStatus onAddProject={() => setIsSiteManagerOpen(true)} />
             {currentProject.id && loading && (activeTab === "overview" ? <OverviewSkeleton /> : <TableSkeleton />)}
             {currentProject.id && !loading && (
               <div key={currentProject.id} className="view">
@@ -147,8 +131,7 @@ const MainLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* Weekly Report Modal */}
-      <WeeklyReportModal
+      <MonthlyReportModal
         isOpen={isWeeklyReportOpen}
         onClose={() => setIsWeeklyReportOpen(false)}
       />

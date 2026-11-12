@@ -26,7 +26,7 @@ interface Tokens {
   expiresAt?: number;
 }
 const scope =
-  "openid email profile https://www.googleapis.com/auth/webmasters.readonly";
+  "openid email profile https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly";
 export function cookie(req: Request, key: string) {
   return req.headers
     .get("Cookie")
@@ -219,7 +219,7 @@ export async function beginOAuth(req: Request, env: Env) {
     },
   });
 }
-export async function callback(req: Request, env: Env) {
+export async function callback(req: Request, env: Env, onConnected?: (userId: string) => void) {
   const url = new URL(req.url);
   const state = url.searchParams.get("state");
   if (!state || cookie(req, "razza_oauth") !== state)
@@ -327,6 +327,7 @@ export async function callback(req: Request, env: Env) {
       Date.now() + 7 * 86400000,
     ),
   ]);
+  onConnected?.(accountId);
   const headers = new Headers({ Location: env.APP_BASE_URL });
   headers.append(
     "Set-Cookie",

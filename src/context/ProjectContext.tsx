@@ -27,6 +27,8 @@ interface ProjectRow {
   url: string;
   domain: string;
   gsc_property?: string;
+  ga4_property?: string;
+  code?: string;
   created_at: string;
   last_sync_at?: string;
   keywords_count?: number;
@@ -112,6 +114,8 @@ function projectShape(p: ProjectRow): ProjectDomain {
     name: p.name,
     createdDate: p.created_at,
     gscProperty: p.gsc_property,
+    ga4Property: p.ga4_property,
+    code: p.code,
     lastSyncDate: p.last_sync_at,
     healthScore: NaN,
     totalPagesCrawled: p.pages_crawled ?? 0,
@@ -247,7 +251,9 @@ interface ContextType extends SiteDataStore {
   error: string | null;
   snapshot: Snapshot | null;
   setCurrentProjectById: (id: string) => Promise<void>;
-  addNewProject: (domain: string, name?: string) => Promise<void>;
+  addNewProject: (domain: string, code?: string) => Promise<void>;
+  /** Link the matching Search Console and GA4 properties from the connected Google account. */
+  linkGoogle: () => Promise<{ gscProperty?: string; ga4Property?: string }>;
   batchAddProjects: (
     text: string,
   ) => Promise<{ added: number; skipped: number }>;
@@ -255,6 +261,8 @@ interface ContextType extends SiteDataStore {
   updateProject: (data: {
     name?: string;
     gscProperty?: string;
+    ga4Property?: string;
+    code?: string;
   }) => Promise<void>;
   reloadBacklinks: () => Promise<void>;
   reload: () => Promise<void>;
@@ -438,11 +446,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({
       setError(e instanceof Error ? e.message : "Operation failed.");
     }
   };
-  const addNewProject = async (domain: string, name?: string) =>
+  const addNewProject = async (domain: string, code?: string) =>
     safely(async () => {
       const p = await api<ProjectRow>("/projects", "POST", {
         url: domain,
-        name: name || domain,
+        ...(code ? { code } : {}),
       });
       setProjects((old) => [projectShape(p), ...old]);
       generation.current++;
@@ -484,6 +492,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({
           setCurrentId(id);
         },
         addNewProject,
+        linkGoogle: async () => {
+          const r = await projectApi<{ linked: { gscProperty?: string; ga4Property?: string } }>(currentId, "google/link", "POST");
+          await reload();
+          return r.linked;
+        },
         batchAddProjects: async (text) => {
           let added = 0;
           let skipped = 0;

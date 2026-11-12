@@ -39,7 +39,7 @@ export const SiteManagerModal: React.FC<SiteManagerModalProps> = ({ isOpen, onCl
 
   // Single site form
   const [singleDomain, setSingleDomain] = useState('');
-  const [singleName, setSingleName] = useState('');
+  const [singleCode, setSingleCode] = useState('');
 
   // Batch site form
   const [batchInput, setBatchInput] = useState(
@@ -58,9 +58,9 @@ export const SiteManagerModal: React.FC<SiteManagerModalProps> = ({ isOpen, onCl
   const handleSingleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!singleDomain.trim()) return;
-    await addNewProject(singleDomain.trim(), singleName.trim() || undefined);
+    await addNewProject(singleDomain.trim(), singleCode.trim() || undefined);
     setSingleDomain('');
-    setSingleName('');
+    setSingleCode('');
     setActiveTab('list');
   };
 
@@ -301,7 +301,7 @@ export const SiteManagerModal: React.FC<SiteManagerModalProps> = ({ isOpen, onCl
                   Add a New Website to Track
                 </p>
                 <p>
-                  Create a website project, then connect Search Console, import backlink reports, or run an HTML audit to collect measurements.
+                  Enter the domain. If it's verified in your connected Google account, Search Console and Analytics link automatically and the first audit starts right away.
                 </p>
               </div>
 
@@ -322,13 +322,14 @@ export const SiteManagerModal: React.FC<SiteManagerModalProps> = ({ isOpen, onCl
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  Project / Client Label (Optional)
+                  Project code (optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Acme Corporate (Client)"
-                  value={singleName}
-                  onChange={e => setSingleName(e.target.value)}
+                  placeholder="e.g. RZ-104"
+                  maxLength={40}
+                  value={singleCode}
+                  onChange={e => setSingleCode(e.target.value)}
                   className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-300 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-razza-500"
                 />
               </div>

@@ -22,6 +22,8 @@ export interface ProjectRow {
   url: string;
   name: string;
   gsc_property?: string;
+  ga4_property?: string;
+  code?: string;
   created_at: string;
   last_sync_at?: string;
 }

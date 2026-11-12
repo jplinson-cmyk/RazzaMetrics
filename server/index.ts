@@ -24,6 +24,7 @@ import {
   uid,
 } from "./core";
 import { validateTarget } from "./crawler";
+import { autoLinkGoogle, ga4MonthReport, ga4Properties, gscPropertyMatches } from "./analytics";
 import {
   dateAgo,
   enqueue,
@@ -125,7 +126,8 @@ async function api(
   const url = new URL(req.url);
   const path = url.pathname;
   if (path === "/api/auth/login") return beginOAuth(req, env);
-  if (path === "/api/auth/callback") return callback(req, env);
+  if (path === "/api/auth/callback")
+    return callback(req, env, (ownerId) => ctx.waitUntil(linkOwnerProjects(env, ownerId)));
   if (path === "/api/config" && req.method === "GET")
     return json({
       googleConfigured: !!(
@@ -176,6 +178,8 @@ async function api(
         }>(env, user.id, "/sites")
       ).siteEntry || [],
     );
+  if (path === "/api/google/analytics-properties" && req.method === "GET")
+    return json(await ga4Properties(env, user.id));
   if (path === "/api/projects") {
     if (req.method === "GET")
       return json(
@@ -195,7 +199,8 @@ async function api(
       const b = z
         .object({
           url: z.string().max(2048),
-          name: z.string().trim().min(1).max(200),
+          name: z.string().trim().max(200).optional(),
+          code: z.string().trim().max(40).optional(),
         })
         .parse(await readBody(req));
       let value: URL;
@@ -218,12 +223,13 @@ async function api(
         throw new HttpError(409, "This website already has a project.");
       await stmt(
         env,
-        "INSERT INTO projects(id,owner_id,domain,name,url,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+        "INSERT INTO projects(id,owner_id,domain,name,url,code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
         id,
         user.id,
         valid.hostname,
-        b.name,
+        b.name || valid.hostname,
         valid.href,
+        b.code || null,
         time,
         time,
       ).run();
@@ -232,6 +238,8 @@ async function api(
         maxPages: Math.min(25, Number(env.CRAWLER_MAX_PAGES || 25)),
         maxDepth: Math.min(3, Number(env.CRAWLER_MAX_DEPTH || 3)),
       });
+      // Link the matching Search Console and GA4 properties if this Google account already has them.
+      await linkProject(env, { id, owner_id: user.id, domain: valid.hostname });
       ctx.waitUntil(runJobs(env, id));
       return json(await authorizedProject(env, user.id, id), 201);
     }
@@ -240,6 +248,19 @@ async function api(
   if (!match) throw new HttpError(404, "API route not found.");
   const p = await authorizedProject(env, user.id, decodeURIComponent(match[1]));
   const action = match[2] || "";
+  if (action === "google/link" && req.method === "POST") {
+    const linked = await linkProject(env, p);
+    return json({ linked, project: await authorizedProject(env, user.id, p.id) });
+  }
+  if (action === "ga4/report" && req.method === "GET") {
+    if (!p.ga4_property) throw new HttpError(409, "No Google Analytics property is linked to this site.");
+    const date = (k: string) => z.iso.date().parse(url.searchParams.get(k));
+    return json(
+      await ga4MonthReport(env, p.owner_id, p.ga4_property,
+        { start: date("start"), end: date("end") },
+        { start: date("prevStart"), end: date("prevEnd") }),
+    );
+  }
   if (action === "settings" && req.method === "GET")
     return json(await settings(env, p.id));
   if (action === "settings" && req.method === "PUT") {
@@ -268,6 +289,8 @@ async function api(
       .object({
         name: z.string().trim().min(1).max(200).optional(),
         gscProperty: z.string().max(2048).optional(),
+        ga4Property: z.string().regex(/^(properties\/\d+)?$/).optional(),
+        code: z.string().trim().max(40).optional(),
         status: z.enum(["active", "archived"]).optional(),
       })
       .parse(await readBody(req));
@@ -286,26 +309,21 @@ async function api(
           403,
           "This Google account does not have verified access to that property.",
         );
-      const propertyHost = b.gscProperty.startsWith("sc-domain:")
-        ? b.gscProperty.slice(10)
-        : new URL(b.gscProperty).hostname;
-      if (
-        p.domain !== propertyHost &&
-        !(
-          b.gscProperty.startsWith("sc-domain:") &&
-          p.domain.endsWith("." + propertyHost)
-        )
-      )
+      if (!gscPropertyMatches(p.domain, b.gscProperty))
         throw new HttpError(
           400,
           "Property does not match the project website.",
         );
     }
+    if (b.ga4Property && !(await ga4Properties(env, user.id)).some((g) => g.property === b.ga4Property))
+      throw new HttpError(403, "This Google account cannot read that Analytics property.");
     await stmt(
       env,
-      "UPDATE projects SET name=?,gsc_property=?,status=?,updated_at=? WHERE id=? AND owner_id=?",
+      "UPDATE projects SET name=?,gsc_property=?,ga4_property=?,code=?,status=?,updated_at=? WHERE id=? AND owner_id=?",
       b.name || p.name,
       b.gscProperty === undefined ? p.gsc_property : b.gscProperty || null,
+      b.ga4Property === undefined ? (p.ga4_property ?? null) : b.ga4Property || null,
+      b.code === undefined ? (p.code ?? null) : b.code || null,
       b.status || "active",
       now(),
       p.id,
@@ -679,3 +697,25 @@ export default {
     ctx.waitUntil(scheduled(env));
   },
 };
+
+/** Link one site's Google properties and start its first Search Console sync when one was found. */
+async function linkProject(
+  env: Env,
+  project: { id: string; owner_id: string; domain: string; gsc_property?: string | null; ga4_property?: string | null },
+) {
+  const linked = await autoLinkGoogle(env, project, async () =>
+    (await googleJson<{ siteEntry?: { siteUrl: string; permissionLevel: string }[] }>(env, project.owner_id, "/sites")).siteEntry || [],
+  );
+  if (linked.gscProperty) await enqueue(env, project.id, "gsc", { date: dateAgo(93), endDate: dateAgo(3) });
+  return linked;
+}
+
+/** After Google is connected, link every active site that still lacks a Search Console or GA4 property. */
+async function linkOwnerProjects(env: Env, ownerId: string) {
+  const projects = await rows<ProjectRow>(
+    env,
+    "SELECT * FROM projects WHERE owner_id=? AND status='active' AND (gsc_property IS NULL OR ga4_property IS NULL) LIMIT 20",
+    ownerId,
+  );
+  for (const p of projects) await linkProject(env, p);
+}

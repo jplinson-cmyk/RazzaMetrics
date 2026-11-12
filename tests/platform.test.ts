@@ -144,6 +144,7 @@ beforeEach(async () => {
   sql.exec(readFileSync("migrations/0001_platform.sql", "utf8"));
   sql.exec(readFileSync("migrations/0002_project_settings.sql", "utf8"));
   sql.exec(readFileSync("migrations/0003_ai_reports.sql", "utf8"));
+  sql.exec(readFileSync("migrations/0004_ga4_property.sql", "utf8"));
   env = {
     DB: adapter(sql),
     APP_BASE_URL: "https://app.example.com",
@@ -1012,5 +1013,35 @@ describe("new sites", () => {
     expect(job?.type).toBe("crawl");
     expect(JSON.parse(job!.payload)).toMatchObject({ maxPages: expect.any(Number), maxDepth: expect.any(Number) });
     expect(JSON.parse(job!.payload).maxPages).toBeGreaterThan(1);
+  });
+});
+
+describe("automatic Google linking", () => {
+  it("matches Search Console properties with or without www and across subdomains", async () => {
+    const { gscPropertyMatches } = await import("../server/analytics");
+    expect(gscPropertyMatches("razzaconsulting.com", "https://www.razzaconsulting.com/")).toBe(true);
+    expect(gscPropertyMatches("www.razzaconsulting.com", "https://razzaconsulting.com/")).toBe(true);
+    expect(gscPropertyMatches("blog.razzaconsulting.com", "sc-domain:razzaconsulting.com")).toBe(true);
+    expect(gscPropertyMatches("razzaconsulting.com.evil.io", "sc-domain:razzaconsulting.com")).toBe(false);
+    expect(gscPropertyMatches("other.com", "https://razzaconsulting.com/")).toBe(false);
+  });
+  it("links the best verified property and starts a sync when a site is added", async () => {
+    const { autoLinkGoogle } = await import("../server/analytics");
+    const owner = (sql.prepare("SELECT owner_id FROM projects WHERE id='p1'").get() as { owner_id: string }).owner_id;
+    sql.prepare("INSERT INTO projects(id,owner_id,domain,name,url,created_at,updated_at) VALUES('p9',?,'example.org','Example','https://example.org/','2026-01-01','2026-01-01')").run(owner);
+    const linked = await autoLinkGoogle(env, { id: "p9", owner_id: owner, domain: "example.org" }, async () => [
+      { siteUrl: "https://www.example.org/", permissionLevel: "siteOwner" },
+      { siteUrl: "sc-domain:example.org", permissionLevel: "siteFullUser" },
+      { siteUrl: "sc-domain:other.org", permissionLevel: "siteOwner" },
+    ]);
+    expect(linked.gscProperty).toBe("sc-domain:example.org");
+    expect(linked.ga4Property).toBeUndefined(); // no Google connection for this owner: skipped, not thrown
+    expect(sql.prepare("SELECT gsc_property FROM projects WHERE id='p9'").get()).toEqual({ gsc_property: "sc-domain:example.org" });
+  });
+  it("still adds the site when Google is not connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html><title>x</title></html>", { headers: { "content-type": "text/html" } })));
+    const res = await request("/projects", "POST", { url: "https://unlinked.example/", code: "RZ-104" });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ domain: "unlinked.example", name: "unlinked.example", code: "RZ-104", gsc_property: null });
   });
 });

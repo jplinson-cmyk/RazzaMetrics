@@ -249,10 +249,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           onClick={onOpenWeeklyReport}
           className="topbar-button"
-          title="Export project reports"
+          title="Monthly report"
         >
           <Mail className="w-4 h-4" />
-          <span className="hidden md:inline">Weekly Report</span>
+          <span className="hidden md:inline">Monthly Report</span>
         </button>
 
         <button

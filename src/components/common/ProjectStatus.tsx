@@ -1,212 +1,131 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { BarChart3, Check, Cog, Link2, RefreshCw, Search, ScanLine } from "lucide-react";
 import { useProject } from "../../context/ProjectContext";
 import { projectApi } from "../../services/api";
 import { ProjectRules } from "./ProjectRules";
-export const ProjectStatus: React.FC<{ onAddProject: () => void }> = ({
-  onAddProject,
-}) => {
-  const {
-    currentProject,
-    loading,
-    error,
-    snapshot,
-    filters,
-    setFilters,
-    reload,
-    queueJob,
-    updateProject,
-  } = useProject();
-  const input =
-    "p-2 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-surface text-xs dark:text-white";
+import { GoogleConnect } from "../integrations/GoogleConnect";
+
+/**
+ * The strip under the page title: what this site is connected to, the sync state, and the few actions
+ * that matter. Dates, device and country live in the context bar; everything else sits in Settings.
+ */
+export const ProjectStatus: React.FC<{ onAddProject: () => void }> = ({ onAddProject }) => {
+  const { currentProject, error, snapshot, reload, queueJob, updateProject, runFullSiteAudit, isAuditing } = useProject();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [googleOpen, setGoogleOpen] = useState(false);
+  const onOpenGoogle = () => setGoogleOpen(true);
+  const [name, setName] = useState(currentProject.name);
+  const [code, setCode] = useState(currentProject.code || "");
+  useEffect(() => {
+    setName(currentProject.name);
+    setCode(currentProject.code || "");
+  }, [currentProject.id, currentProject.name, currentProject.code]);
+
+  if (!currentProject.id)
+    return (
+      <section className="card empty-start">
+        <h2>Add your first website</h2>
+        <p>Enter a domain. If it's verified in your Google account, Search Console and Analytics connect on their own.</p>
+        <button type="button" className="workspace-action" onClick={onAddProject}>
+          Add project
+        </button>
+      </section>
+    );
+
+  const active = snapshot?.jobs.filter((j) => ["QUEUED", "RUNNING"].includes(j.status)) || [];
+  const failed = snapshot?.jobs.filter((j) => j.last_error) || [];
+  const chip = (linked: boolean, label: string, Icon: typeof Search) => (
+    <button type="button" className={`status-chip ${linked ? "is-on" : "is-off"}`} onClick={onOpenGoogle} title={linked ? `${label} linked` : `${label} not linked: open Google settings`}>
+      <Icon className="w-4 h-4" aria-hidden="true" />
+      {label}
+      {linked ? <Check className="w-3.5 h-3.5" aria-label="linked" /> : <span className="status-chip-action">Link</span>}
+    </button>
+  );
+
   return (
-    <div
-      className="space-y-3 mb-6"
-      data-report-range={`${filters.start} to ${filters.end}`}
-    >
+    <div className="project-strip-wrap">
       {error && (
-        <div
-          role="alert"
-          className="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-sm"
-        >
+        <div role="alert" className="strip-alert">
           {error}
-          <button className="ml-3 underline" onClick={() => void reload()}>
+          <button type="button" className="card-link" onClick={() => void reload()}>
             Retry
           </button>
         </div>
       )}
-      {loading && (
-        <div role="status" className="p-4 text-sm text-gray-500">
-          Loading saved project measurements…
-          <div
-            aria-hidden="true"
-            className="grid grid-cols-3 gap-3 mt-4 animate-pulse"
-          >
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-24 rounded-xl bg-slate-200 dark:bg-slate-700"
-              />
-            ))}
-          </div>
+      <div className="project-strip">
+        <div className="project-strip-status">
+          {currentProject.code && <span className="project-code">{currentProject.code}</span>}
+          {chip(!!currentProject.gscProperty, "Search Console", Search)}
+          {chip(!!currentProject.ga4Property, "Analytics", BarChart3)}
+          <span className="strip-meta">
+            {active.length
+              ? `${active.length} job${active.length > 1 ? "s" : ""} running`
+              : currentProject.lastSyncDate
+                ? `Synced ${new Date(currentProject.lastSyncDate).toLocaleDateString()}`
+                : "Not synced yet"}
+          </span>
         </div>
-      )}
-      {!currentProject.id ? (
-        <div className="tool-panel p-4">
-          <p className="text-sm dark:text-white">
-            Add a website to begin. Connect Search Console, import backlinks, or
-            run a crawl to collect real measurements.
-          </p>
-          <button
-            className="mt-4 px-4 py-2 rounded-xl bg-razza-500 text-white"
-            onClick={onAddProject}
-          >
-            Add project
+        <div className="project-strip-actions">
+          <button type="button" className="btn-secondary" disabled={!currentProject.gscProperty} onClick={() => void queueJob("gsc")} title={currentProject.gscProperty ? "Fetch the latest Search Console data" : "Link Search Console first"}>
+            <RefreshCw className="w-4 h-4" aria-hidden="true" /> Sync
+          </button>
+          <button type="button" className="btn-secondary" disabled={isAuditing} onClick={() => void runFullSiteAudit()}>
+            <ScanLine className="w-4 h-4" aria-hidden="true" /> {isAuditing ? "Auditing…" : "Audit"}
+          </button>
+          <button type="button" className="btn-secondary" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+            <Cog className="w-4 h-4" aria-hidden="true" /> Settings
           </button>
         </div>
-      ) : (
-        <>
-          {(!currentProject.gscProperty ||
-            !snapshot?.audits.some((a) => a.status === "completed")) && (
-            <details className="analytics-panel" open={!snapshot?.jobs.length}>
-              <summary className="font-semibold text-sm">
-                Welcome — finish setting up your website
-              </summary>
-              <ol className="grid sm:grid-cols-3 gap-4 mt-4 text-sm">
-                <li>✓ Website project created</li>
-                <li>
-                  {currentProject.gscProperty ? "✓" : "○"} Select Google
-                  property using GSC in the header
-                </li>
-                <li>
-                  {snapshot?.audits.some((a) => a.status === "completed")
-                    ? "✓"
-                    : "○"}{" "}
-                  Run your first technical audit{" "}
-                  <button
-                    className="text-blue-600 underline"
-                    onClick={() =>
-                      void queueJob("crawl", { maxPages: 1, maxDepth: 0 })
-                    }
-                  >
-                    Run audit
-                  </button>
-                </li>
-              </ol>
-              <p className="text-xs text-slate-500 mt-3">
-                Google is optional for imports, issue management and technical
-                audits. Setup progress reflects saved project records.
-              </p>
-            </details>
-          )}
-          <div className="tool-panel flex flex-wrap items-end gap-2 p-4">
-            <label className="text-xs text-gray-500">
-              From{" "}
-              <input
-                aria-label="Start date"
-                type="date"
-                className={input}
-                value={filters.start}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, start: e.target.value }))
-                }
-              />
+      </div>
+      {failed.length > 0 && !settingsOpen && (
+        <p className="strip-warning">
+          {failed.length} background job{failed.length > 1 ? "s" : ""} reported a problem.{" "}
+          <button type="button" className="card-link" onClick={() => setSettingsOpen(true)}>
+            View
+          </button>
+        </p>
+      )}
+
+      {settingsOpen && (
+        <section className="card settings-panel" aria-label="Project settings">
+          <form
+            className="settings-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void updateProject({ name: name.trim() || currentProject.name, code: code.trim() });
+            }}
+          >
+            <label className="login-field">
+              <span>Project name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
             </label>
-            <label className="text-xs text-gray-500">
-              To{" "}
-              <input
-                aria-label="End date"
-                type="date"
-                className={input}
-                value={filters.end}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, end: e.target.value }))
-                }
-              />
+            <label className="login-field">
+              <span>Project code</span>
+              <input value={code} onChange={(e) => setCode(e.target.value)} maxLength={40} placeholder="e.g. RZ-104" />
             </label>
-            <select
-              aria-label="Device filter"
-              className={input}
-              value={filters.device}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, device: e.target.value }))
-              }
-            >
-              <option value="">All devices</option>
-              {["DESKTOP", "MOBILE", "TABLET"].map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-            <input
-              aria-label="Country code filter"
-              className={input}
-              placeholder="Country code (e.g. phl)"
-              maxLength={3}
-              value={filters.country}
-              onChange={(e) =>
-                setFilters((f) => ({
-                  ...f,
-                  country: e.target.value.toLowerCase(),
-                }))
-              }
-            />
-            <button className={input} onClick={() => void reload()}>
-              Refresh
+            <button type="submit" className="btn-secondary">
+              Save
             </button>
-            <button
-              className={input}
-              disabled={!currentProject.gscProperty}
-              onClick={() => void queueJob("gsc")}
-            >
-              Sync now
+            <button type="button" className="btn-secondary" onClick={onOpenGoogle}>
+              <Link2 className="w-4 h-4" aria-hidden="true" /> Google
             </button>
-            <button
-              className={input}
-              onClick={() => {
-                const name = window.prompt("Project name", currentProject.name);
-                if (name?.trim()) void updateProject({ name });
-              }}
-            >
-              Edit project
-            </button>
-          </div>
-          <p className="text-xs text-gray-500">
-            Search Console average position; imported backlinks; server HTML
-            audits. Last successful sync:{" "}
-            {currentProject.lastSyncDate || "Not yet synchronized"}. Authority
-            enrichment: disabled.
-          </p>
-          <ProjectRules />
-          {!snapshot?.performance.length && (
-            <p className="text-xs text-gray-500">
-              No Search Console measurements in this period. Connect a verified
-              property using GSC, then sync. Google may take several days to
-              finalize measurements.
-            </p>
-          )}
+          </form>
+
           {!!snapshot?.jobs.length && (
-            <details
-              className="p-3 rounded-xl bg-white dark:bg-dark-card border dark:border-dark-border text-xs text-gray-600 dark:text-gray-300"
-              open={snapshot.jobs.some((j) => j.last_error)}
-            >
-              <summary>Saved background jobs ({snapshot.jobs.length})</summary>
-              <ul className="space-y-2 mt-3">
-                {snapshot.jobs.map((j) => (
-                  <li key={j.id} className="flex flex-wrap gap-2">
-                    <span>
-                      {j.type}: {j.status} ({j.progress}%)
-                    </span>
-                    {j.last_error && (
-                      <span className="text-amber-600">{j.last_error}</span>
-                    )}
+            <div>
+              <h3 className="settings-heading">Background jobs</h3>
+              <ul className="job-list">
+                {snapshot.jobs.slice(0, 10).map((j) => (
+                  <li key={j.id}>
+                    <span className="job-type">{j.type === "gsc" ? "Search Console sync" : j.type === "crawl" ? "Site audit" : j.type === "pagespeed" ? "PageSpeed test" : j.type}</span>
+                    <span className={`job-state job-state--${j.status.toLowerCase()}`}>{j.status.toLowerCase()} {j.progress}%</span>
+                    {j.last_error && <span className="job-error">{j.last_error}</span>}
                     {["RUNNING", "QUEUED"].includes(j.status) && (
                       <button
-                        className="underline"
+                        type="button"
+                        className="card-link"
                         onClick={async () => {
-                          await projectApi(
-                            currentProject.id,
-                            `jobs/${j.id}/cancel`,
-                            "POST",
-                          );
+                          await projectApi(currentProject.id, `jobs/${j.id}/cancel`, "POST");
                           await reload();
                         }}
                       >
@@ -216,10 +135,18 @@ export const ProjectStatus: React.FC<{ onAddProject: () => void }> = ({
                   </li>
                 ))}
               </ul>
-            </details>
+            </div>
           )}
-        </>
+          <ProjectRules />
+        </section>
       )}
+      <GoogleConnect
+        isOpen={googleOpen}
+        onClose={() => setGoogleOpen(false)}
+        projectId={currentProject.id}
+        currentGscProperty={currentProject.gscProperty}
+        onPropertySelected={() => undefined}
+      />
     </div>
   );
 };
