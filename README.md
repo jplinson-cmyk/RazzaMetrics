@@ -2,6 +2,8 @@
 
 An SEO analytics and site explorer for Razza Consulting. Pick a client domain and a period, and Razza Metrics shows how much organic search traffic it earns, which keywords and pages earn it, what its backlink profile looks like, and what the technical audit found. It reads in the same order as Ahrefs Site Explorer and Semrush Domain Overview, built on data the team owns.
 
+**Live prototype:** [razza-metrics.razza-seo-platform.workers.dev](https://razza-metrics.razza-seo-platform.workers.dev). Sign-in is restricted to Razza Consulting accounts.
+
 ![Overview](docs/screenshots/overview.png)
 
 ## What it does
