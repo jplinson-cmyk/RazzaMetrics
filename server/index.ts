@@ -681,7 +681,9 @@ async function api(
   if (action === "jobs/process" && req.method === "POST") {
     await budget(env, user.id, "job-poll", 5000);
     // Background work after a response is short-lived, so PageSpeed (often 20–40 s) is left to the cron.
-    ctx.waitUntil(runJobs(env, p.id, 20000, ["pagespeed"]));
+    // The local dev server runs no cron, so there PageSpeed runs here too.
+    const local = env.APP_BASE_URL?.startsWith("http://localhost");
+    ctx.waitUntil(runJobs(env, p.id, 20000, local ? [] : ["pagespeed"]));
     return json({ accepted: true });
   }
   const cancel = action.match(/^jobs\/([^/]+)\/cancel$/);

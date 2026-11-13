@@ -57,6 +57,7 @@ interface Job {
   status: string;
   progress: number;
   last_error?: string;
+  created_at?: string;
 }
 interface Snapshot {
   findings: {

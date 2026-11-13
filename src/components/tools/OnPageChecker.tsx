@@ -48,6 +48,8 @@ export const OnPageChecker: React.FC = () => {
   const [maxDepth, setMaxDepth] = useState(3);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [isPsiRunning, setIsPsiRunning] = useState(false);
+  // Set while a queued test is running; cleared when a result newer than the request arrives.
+  const [psiRequestedAt, setPsiRequestedAt] = useState("");
   const [psiResult, setPsiResult] = useState<PageSpeedApiResult | null>(null);
   const [psiStrategy, setPsiStrategy] = useState<"mobile" | "desktop">(
     "mobile",
@@ -72,7 +74,14 @@ export const OnPageChecker: React.FC = () => {
       (p) => p.url === inputUrl && p.strategy === "desktop",
     );
     if (mobile || desktop) setPsiResult({ mobile, desktop });
-  }, [snapshot, inputUrl]);
+    if (psiRequestedAt && [mobile, desktop].every((r) => r && r.testedAt >= psiRequestedAt)) setPsiRequestedAt("");
+    // A test that gave up shows Google's reason instead of "running" forever.
+    const failed = psiRequestedAt && snapshot?.jobs.find((j) => j.type === "pagespeed" && j.status === "FAILED" && (j.created_at || "") >= psiRequestedAt);
+    if (failed) {
+      setPsiResult((r) => ({ ...r, error: failed.last_error || "PageSpeed Insights could not test this URL." }));
+      setPsiRequestedAt("");
+    }
+  }, [snapshot, inputUrl, psiRequestedAt]);
 
   const filteredChecks = onPageChecks.filter((c) => {
     if (selectedCategory === "all") return true;
@@ -94,8 +103,10 @@ export const OnPageChecker: React.FC = () => {
     if (!inputUrl.trim()) return;
     setIsPsiRunning(true);
     try {
-      const res = await runPageSpeedTest(currentProject.id, inputUrl.trim());
-      setPsiResult(res);
+      // A minute of slack: the browser and server clocks can differ by a few seconds.
+      setPsiRequestedAt(new Date(Date.now() - 60000).toISOString());
+      setPsiResult((r) => r ?? {});
+      await runPageSpeedTest(currentProject.id, inputUrl.trim());
       await reload();
     } catch (e) {
       setPsiResult({
@@ -352,6 +363,9 @@ export const OnPageChecker: React.FC = () => {
                 <h4 className="text-xs font-bold font-heading text-gray-900 dark:text-white">
                   Google PageSpeed Insights &amp; Core Web Vitals
                 </h4>
+                {psiRequestedAt && psiResult[psiStrategy] && (
+                  <span className="text-[10px] text-gray-500" role="status">Updating… showing the last test</span>
+                )}
               </div>
 
               <div className="flex rounded-lg bg-gray-100 dark:bg-dark-surface p-0.5 text-[11px] font-semibold">
@@ -485,7 +499,9 @@ export const OnPageChecker: React.FC = () => {
             ) : (
               <div className="text-xs text-rose-600 dark:text-rose-400 p-2">
                 {psiResult.error ||
-                  "PageSpeed Insights test could not complete for this URL."}
+                  (psiRequestedAt
+                    ? "Running PageSpeed Insights… a test takes 20–60 seconds; results appear here when it finishes."
+                    : `No ${psiStrategy} PageSpeed result for this URL yet. Run a test above.`)}
               </div>
             )}
           </div>
