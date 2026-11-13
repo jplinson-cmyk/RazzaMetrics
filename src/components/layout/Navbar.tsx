@@ -136,8 +136,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </button>
 
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-dark-border font-bold">
-                        Not scored
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-dark-border font-bold" title="Pages without errors in the last site audit">
+                        {Number.isFinite(proj.healthScore) ? `${proj.healthScore}% health` : "No audit yet"}
                       </span>
                       {projects.length > 1 && (
                         <button
@@ -192,7 +192,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="flex items-center justify-center gap-1 p-1.5 rounded-lg text-xs font-semibold text-razza-600 dark:text-razza-400 hover:bg-razza-50 dark:hover:bg-razza-900/20"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ Add Site</span>
+                      <span>Add Site</span>
                     </button>
                     <button
                       onClick={() => {

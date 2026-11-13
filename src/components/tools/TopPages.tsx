@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { useProject } from "../../context/ProjectContext";
+import { MonthFilter, recentMonths, useSearchRows } from "../explorer/MonthFilter";
 import { aggregate, display } from "../../services/measurements";
 import { abbreviate, delta, topPages, urlPath, type PageRow } from "../../services/explorer";
 import { TablePager } from "../common/TablePager";
@@ -23,8 +24,10 @@ export const TopPages: React.FC = () => {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "clicks", dir: -1 });
   const [page, setPage] = useState(1);
+  const [month, setMonth] = useState("");
+  const src = useSearchRows(month);
 
-  const rows = useMemo(() => (snapshot ? topPages(snapshot.performance, snapshot.previousPerformance) : []), [snapshot]);
+  const rows = useMemo(() => (snapshot ? topPages(src.rows, src.previous) : []), [snapshot, src.rows, src.previous]);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const value = (r: PageRow) =>
@@ -44,14 +47,17 @@ export const TopPages: React.FC = () => {
   if (!snapshot && error) {
     return <section className="card"><WidgetState kind="error" title="Pages could not load" body={error} onRetry={() => void reload()} /></section>;
   }
-  const total = aggregate(snapshot?.performance || []);
+  const total = aggregate(src.rows);
   const ranked = rows.filter((r) => r.clicks > 0).length;
 
   return (
     <div className={`tool-screen ${refreshing ? "is-refreshing" : ""}`}>
       <div className="tool-header">
         <p className="tool-intro">Every page Google showed for this site in the period, ranked by clicks from Search Console.</p>
+        <MonthFilter value={month} onChange={(m) => { setMonth(m); setPage(1); }} months={recentMonths()} />
       </div>
+      {src.error && <WidgetState kind="error" title="This month could not load" body={src.error} />}
+      {src.loading && <p className="chart-loading" role="status">Loading month…</p>}
 
       <dl className="summary-strip" aria-label="Page summary">
         <div><dt>Pages with impressions</dt><dd>{rows.length.toLocaleString()}</dd></div>

@@ -190,7 +190,11 @@ async function api(
           `SELECT p.*,
             (SELECT COUNT(*) FROM tracked_keywords k WHERE k.project_id=p.id) AS keywords_count,
             (SELECT COUNT(DISTINCT json_extract(b.data,'$.sourceDomain')) FROM backlinks b WHERE b.project_id=p.id) AS referring_domains,
-            (SELECT json_extract(a.data,'$.pagesCrawled') FROM audit_runs a WHERE a.project_id=p.id AND json_extract(a.data,'$.status')='completed' AND json_extract(a.data,'$.scope.maxPages')>1 ORDER BY a.created_at DESC LIMIT 1) AS pages_crawled
+            (SELECT json_extract(a.data,'$.pagesCrawled') FROM audit_runs a WHERE a.project_id=p.id AND json_extract(a.data,'$.status')='completed' AND json_extract(a.data,'$.scope.maxPages')>1 ORDER BY a.created_at DESC LIMIT 1) AS pages_crawled,
+            -- Same rule as the overview: share of fully analysed pages in the last site audit with no error findings.
+            (SELECT CASE WHEN COUNT(*)>0 THEN ROUND(100.0*SUM(NOT EXISTS(SELECT 1 FROM json_each(c.data,'$.findings') f WHERE json_extract(f.value,'$.severity')='error'))/COUNT(*)) END
+              FROM crawled_pages c WHERE c.project_id=p.id AND COALESCE(json_extract(c.data,'$.analysisStatus'),'complete')='complete'
+              AND c.audit_id=(SELECT a.id FROM audit_runs a WHERE a.project_id=p.id AND json_extract(a.data,'$.status')='completed' AND json_extract(a.data,'$.scope.maxPages')>1 ORDER BY a.created_at DESC LIMIT 1)) AS health_score
           FROM projects p WHERE p.owner_id=? AND p.status='active' ORDER BY p.created_at DESC LIMIT 100`,
           user.id,
         ),

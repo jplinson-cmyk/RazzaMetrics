@@ -34,6 +34,7 @@ interface ProjectRow {
   keywords_count?: number;
   referring_domains?: number;
   pages_crawled?: number | null;
+  health_score?: number | null;
 }
 interface Page {
   analysisStatus?: string;
@@ -117,7 +118,7 @@ function projectShape(p: ProjectRow): ProjectDomain {
     ga4Property: p.ga4_property,
     code: p.code,
     lastSyncDate: p.last_sync_at,
-    healthScore: NaN,
+    healthScore: p.health_score ?? NaN,
     totalPagesCrawled: p.pages_crawled ?? 0,
     organicTrafficMonthly: NaN,
     trackedKeywordsCount: p.keywords_count ?? 0,
