@@ -560,6 +560,38 @@ describe("measurements, quotas and jobs", () => {
     expect(sql.prepare("SELECT * FROM gsc_performance").all()).toHaveLength(2);
   });
 });
+describe("Search Console sync stays inside the free D1 write limit", () => {
+  const asked: string[] = [];
+  beforeEach(async () => {
+    asked.length = 0;
+    sql.prepare("UPDATE projects SET gsc_property=? WHERE id=?").run("https://example.com/", "p1");
+    sql.prepare("INSERT INTO google_connections VALUES(?,?,?,?)").run(
+      "u1", await crypt(env, JSON.stringify({ access_token: "token", expiresAt: Date.now() + 3600000 })), "", "2026",
+    );
+    // Two rows for whichever day is asked for.
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+      const day = JSON.parse(String(init?.body)).startDate as string;
+      asked.push(day);
+      return Response.json({ rows: ["a", "b"].map((x) => ({ keys: [day, "query", `https://example.com/${x}`, "DESKTOP", "phl"], clicks: 1, impressions: 10, position: 3 })) });
+    }));
+  });
+  it("fetches the newest day first and rewrites nothing when Google's numbers are unchanged", async () => {
+    await enqueue(env, "p1", "gsc", { date: "2026-01-01", endDate: "2026-01-03" });
+    await runJobs(env, "p1");
+    expect(asked).toEqual(["2026-01-03", "2026-01-02", "2026-01-01"]);
+    sql.prepare("UPDATE gsc_performance SET synced_at='before'").run();
+    await enqueue(env, "p1", "gsc", { date: "2026-01-01", endDate: "2026-01-03" });
+    await runJobs(env, "p1");
+    expect(sql.prepare("SELECT DISTINCT synced_at FROM gsc_performance").all()).toEqual([{ synced_at: "before" }]);
+  });
+  it("pauses a backfill at the daily row allowance and keeps what it saved", async () => {
+    env.DAILY_GSC_ROW_LIMIT = "3";
+    const id = await enqueue(env, "p1", "gsc", { date: "2026-01-01", endDate: "2026-01-03" });
+    await runJobs(env, "p1");
+    expect(sql.prepare("SELECT count(*) n FROM gsc_performance").get()).toEqual({ n: 2 });
+    expect(sql.prepare("SELECT status,last_error FROM background_jobs WHERE id=?").get(id)).toMatchObject({ status: "QUEUED", last_error: expect.stringContaining("budget reached") });
+  });
+});
 describe("crawler", () => {
   it.each([
     "http://example.com/",

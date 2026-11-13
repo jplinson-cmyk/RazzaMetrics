@@ -16,6 +16,7 @@ export interface Env {
   DAILY_CRAWL_PAGE_LIMIT?: string;
   DAILY_PAGESPEED_REQUEST_LIMIT?: string;
   DAILY_GSC_REQUEST_LIMIT?: string;
+  DAILY_GSC_ROW_LIMIT?: string;
   DAILY_GA4_REQUEST_LIMIT?: string;
   OPEN_PAGERANK_ADAPTER_URL?: string;
   OPEN_PAGERANK_ADAPTER_TOKEN?: string;
@@ -83,15 +84,19 @@ export async function budget(
   scope: string,
   service: string,
   limit: number,
+  amount = 1,
 ) {
   const date = now().slice(0, 10);
   const result = await stmt(
     env,
-    `INSERT INTO usage_budgets(scope,service,date,used) VALUES(?,?,?,1)
-    ON CONFLICT(scope,service,date) DO UPDATE SET used=used+1 WHERE used < ? RETURNING used`,
+    `INSERT INTO usage_budgets(scope,service,date,used) VALUES(?,?,?,?)
+    ON CONFLICT(scope,service,date) DO UPDATE SET used=used+? WHERE used+? <= ? RETURNING used`,
     scope,
     service,
     date,
+    amount,
+    amount,
+    amount,
     limit,
   ).first();
   if (!result)

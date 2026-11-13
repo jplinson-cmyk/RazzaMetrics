@@ -38,6 +38,8 @@ interface Job {
 export interface JobPayload {
   date?: string;
   initialDate?: string;
+  /** New syncs walk from the newest day back, so a backfill split over several days fills recent charts first. */
+  newestFirst?: boolean;
   endDate?: string;
   startRow?: number;
   url?: string;
@@ -130,10 +132,14 @@ async function syncBatch(
 ) {
   if (!project.gsc_property)
     throw new HttpError(409, "Select an authorized Search Console property.");
-  p.date ||= dateAgo(93);
   p.endDate ||= dateAgo(3);
   p.startRow ||= 0;
-  p.initialDate ||= p.date;
+  if (!p.initialDate) {
+    p.initialDate = p.date || dateAgo(93);
+    p.date = p.endDate;
+    p.newestFirst = true;
+  }
+  p.date ||= p.initialDate;
   const result = await googleJson<{
     rows?: {
       keys: string[];
@@ -156,6 +162,10 @@ async function syncBatch(
     },
   );
   await checkActive();
+  // Free plan: 100,000 D1 row writes a day, and each new Search Console row costs 4 (table and 3 indexes).
+  // A long backfill stops here and continues after midnight UTC instead of blocking every write on the account.
+  if (result.rows?.length)
+    await budget(env, "global", "gsc-rows", Number(env.DAILY_GSC_ROW_LIMIT || 15000), result.rows.length);
   const statements = [];
   for (const r of result.rows || []) {
     if (
@@ -168,7 +178,7 @@ async function syncBatch(
     statements.push(
       stmt(
         env,
-        `INSERT INTO gsc_performance VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(project_id,keyword,page,date,device,country) DO UPDATE SET clicks=excluded.clicks,impressions=excluded.impressions,position=excluded.position,synced_at=excluded.synced_at`,
+        `INSERT INTO gsc_performance VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(project_id,keyword,page,date,device,country) DO UPDATE SET clicks=excluded.clicks,impressions=excluded.impressions,position=excluded.position,synced_at=excluded.synced_at WHERE clicks<>excluded.clicks OR impressions<>excluded.impressions OR position<>excluded.position`,
         id,
         project.id,
         keyword,
@@ -185,16 +195,17 @@ async function syncBatch(
   }
   for (let i = 0; i < statements.length; i += 80)
     await env.DB.batch(statements.slice(i, i + 80));
-  if (result.rows?.length === 1000) {
+  // Up to 5,000 rows a day (Google sorts by clicks, so the long tail is what gets cut).
+  if (result.rows?.length === 1000 && p.startRow + 1000 < 5000) {
     p.startRow += 1000;
-    if (p.startRow >= 50000)
-      throw new HttpError(
-        409,
-        "Daily row safety cap reached. Partial measurements retained.",
-      );
     return false;
   }
-  if (p.date < p.endDate) {
+  if (p.newestFirst && p.date > p.initialDate) {
+    p.date = new Date(Date.parse(p.date) - 86400000).toISOString().slice(0, 10);
+    p.startRow = 0;
+    return false;
+  }
+  if (!p.newestFirst && p.date < p.endDate) {
     p.date = new Date(Date.parse(p.date) + 86400000).toISOString().slice(0, 10);
     p.startRow = 0;
     return false;
@@ -720,7 +731,9 @@ async function runOneJob(env: Env, projectId?: string, notSkipped = ""): Promise
         : payload.date && payload.initialDate && payload.endDate
           ? Math.round(
               (100 *
-                (Date.parse(payload.date) - Date.parse(payload.initialDate))) /
+                (payload.newestFirst
+                  ? Date.parse(payload.endDate) - Date.parse(payload.date)
+                  : Date.parse(payload.date) - Date.parse(payload.initialDate))) /
                 (Date.parse(payload.endDate) -
                   Date.parse(payload.initialDate) +
                   86400000),
