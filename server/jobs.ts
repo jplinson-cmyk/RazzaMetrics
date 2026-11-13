@@ -812,7 +812,10 @@ export async function scheduled(env: Env) {
       "DATA_RETENTION_DAYS must be between 30 and 3650.",
     );
   const cutoff = new Date(Date.now() - retention * 86400000).toISOString();
-  await env.DB.batch([
+  // Cleanup once a day: the old-row delete scans the whole Search Console table, and running it every
+  // minute read ~30 million rows a day, six times the free plan's 5 million.
+  const at = new Date();
+  if (at.getUTCHours() === 3 && at.getUTCMinutes() === 0) await env.DB.batch([
     stmt(
       env,
       "DELETE FROM gsc_performance WHERE id IN (SELECT id FROM gsc_performance WHERE date<? LIMIT 1000)",
