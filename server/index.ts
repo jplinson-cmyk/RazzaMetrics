@@ -35,6 +35,7 @@ import {
   scheduled,
 } from "./jobs";
 import { settings, settingsSchema } from "./settings";
+import { bingBacklinksCsv } from "./bing";
 import { PERF_COLUMNS } from "../src/services/measurements";
 
 export async function authorizedProject(env: Env, userId: string, id: string) {
@@ -534,6 +535,14 @@ async function api(
       p.id,
     ).run();
     return json({ deleted: true });
+  }
+  if (action === "backlinks/bing" && req.method === "POST") {
+    await budget(env, user.id, "import", 20);
+    const bing = await bingBacklinksCsv(env, p.url);
+    if (!bing.links) return json({ pages: bing.pages, links: 0, imported: 0 });
+    const result = await importCsv(env, p.id, bing.csv, "bing-webmaster-links.csv");
+    await enqueue(env, p.id, "toxicity", {});
+    return json({ pages: bing.pages, links: bing.links, ...result });
   }
   if (action === "backlinks/import" && req.method === "POST") {
     await budget(env, user.id, "import", 20);

@@ -3,6 +3,7 @@ import { useProject } from "../../context/ProjectContext";
 import { aggregate, display } from "../../services/measurements";
 import {
   abbreviate,
+  authorityEstimate,
   backlinkVelocity,
   dailySeries,
   delta,
@@ -106,9 +107,11 @@ export const PremiumDashboard: React.FC<{
   const kpis = [
     {
       label: "Authority Score",
-      value: "No Data",
-      empty: true,
-      note: "No authority source is connected for this domain.",
+      value: model.domainsNow ? String(authorityEstimate(model.domainsNow)) : "No Data",
+      empty: !model.domainsNow,
+      note: model.domainsNow
+        ? `Estimate from ${model.domainsNow.toLocaleString()} referring domains`
+        : "Import links from Bing or a backlink CSV on Backlink Profile.",
       change: NaN,
       spark: [] as number[],
       tab: "backlinks" as ActiveTab,
@@ -159,7 +162,7 @@ export const PremiumDashboard: React.FC<{
             <span className="kpi-label">{k.label}</span>
             <span className={`kpi-value ${k.empty ? "kpi-value--empty" : ""}`}>{k.value}</span>
             <span className="kpi-foot">
-              {k.empty ? <span className="kpi-note">{k.note}</span> : <DeltaBadge value={k.change} />}
+              {k.empty || !Number.isFinite(k.change) ? <span className="kpi-note">{k.note}</span> : <DeltaBadge value={k.change} />}
               <Sparkline values={k.spark} label={`${k.label} trend`} />
             </span>
           </button>

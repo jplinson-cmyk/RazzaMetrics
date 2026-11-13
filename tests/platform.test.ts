@@ -14,7 +14,7 @@ import {
 } from "../server/crawler";
 import { parseBacklinkCsv, importCsv, recalculate } from "../server/backlinks";
 import { aggregate, unpackRows } from "../src/services/measurements";
-import { keywordStats, parseKeywordList } from "../src/services/explorer";
+import { authorityEstimate, keywordStats, parseKeywordList } from "../src/services/explorer";
 import { abbreviate, auditSeverity, backlinkVelocity, countBy, dailySeries, delta, movers, positionDistribution, shareBy, topPages, vitalRating, weeklyVelocity } from "../src/services/explorer";
 import { scoreBacklink } from "../src/services/toxicityEngine";
 import { enqueue, runJobs } from "../server/jobs";
@@ -559,6 +559,36 @@ describe("measurements, quotas and jobs", () => {
     });
     await runJobs(env, "p1");
     expect(sql.prepare("SELECT * FROM gsc_performance").all()).toHaveLength(2);
+  });
+});
+describe("free link sources", () => {
+  it("says what to add when no Bing key is set", async () => {
+    const r = await request("/projects/p1/backlinks/bing", "POST");
+    expect(r.status).toBe(503);
+    expect((await r.json()).error).toContain("BING_WEBMASTER_API_KEY");
+  });
+  it("imports the links Bing has found as backlinks", async () => {
+    env.BING_WEBMASTER_API_KEY = "test-key";
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      const url = new URL(u);
+      calls.push(url.pathname.split("/").pop()!);
+      if (url.pathname.endsWith("GetLinkCounts"))
+        return Response.json({ d: { Links: [{ Url: "https://example.com/a", Count: 2 }], TotalPages: 1 } });
+      return Response.json({ d: { Details: [
+        { Url: "https://blog.one.org/post", AnchorText: "great seo" },
+        { Url: "https://www.two.net/list", AnchorText: "" },
+        { Url: "ftp://bad.example/x", AnchorText: "x" },
+      ], TotalPages: 1 } });
+    }));
+    const r = await request("/projects/p1/backlinks/bing", "POST");
+    expect(await r.json()).toMatchObject({ pages: 1, links: 2 });
+    expect(calls).toEqual(["GetLinkCounts", "GetUrlLinks"]);
+    const domains = sql.prepare("SELECT DISTINCT json_extract(data,'$.sourceDomain') d FROM backlinks WHERE project_id='p1' ORDER BY d").all();
+    expect(domains).toEqual([{ d: "blog.one.org" }, { d: "two.net" }]);
+  });
+  it("estimates authority from referring domains on a log scale", () => {
+    expect([0, 10, 100, 1000, 10000, 1e9].map(authorityEstimate)).toEqual([NaN, 21, 40, 60, 80, 100]);
   });
 });
 describe("keyword tracking import and statistics", () => {

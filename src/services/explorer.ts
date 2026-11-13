@@ -157,6 +157,13 @@ export function shareBy(rows: PerformanceRow[], key: "device" | "country") {
     .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
 }
 
+/**
+ * A 0–100 authority estimate from referring domains on a log scale (10 → 21, 100 → 40, 1,000 → 60, 10,000 → 80).
+ * shortcut: our own estimate, not Semrush/Ahrefs/Open PageRank; swap in a link-index score if a paid source is added.
+ */
+export const authorityEstimate = (referringDomains: number) =>
+  referringDomains > 0 ? Math.min(100, Math.round(20 * Math.log10(1 + referringDomains))) : NaN;
+
 /** Keywords from pasted text or a CSV: one per line, first column only, header and duplicates dropped. */
 export function parseKeywordList(text: string): string[] {
   const out = text

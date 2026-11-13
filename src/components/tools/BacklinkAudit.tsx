@@ -23,10 +23,12 @@ import {
   Info,
 } from "lucide-react";
 import { BacklinkItem } from "../../types/seo";
+import { projectApi } from "../../services/api";
 
 export const BacklinkAudit: React.FC = () => {
-  const { backlinks, updateBacklinkDisavow, currentProject, reloadBacklinks } =
+  const { backlinks, updateBacklinkDisavow, currentProject, reloadBacklinks, reload } =
     useProject();
+  const [bingNotice, setBingNotice] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -140,6 +142,23 @@ export const BacklinkAudit: React.FC = () => {
             <Upload className="w-4 h-4" />
             <span>Import GSC Backlinks</span>
           </button>
+          <button
+            onClick={async () => {
+              setBingNotice("Asking Bing Webmaster Tools for links…");
+              try {
+                const r = await projectApi<{ pages: number; links: number }>(currentProject.id, "backlinks/bing", "POST");
+                await reload();
+                setBingNotice(r.links ? `Imported ${r.links} links to ${r.pages} of your pages from Bing.` : "Bing has no inbound links on record for this site yet.");
+              } catch (e) {
+                setBingNotice(e instanceof Error ? e.message : "Bing import failed.");
+              }
+            }}
+            className="btn-secondary inline-flex items-center gap-1.5 text-xs font-semibold"
+            title="Import the links Bing Webmaster Tools has found to this site (free API key)"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Import from Bing</span>
+          </button>
           <ExportButton
             onClick={handleExportCsv}
             label="Export Backlinks CSV"
@@ -147,6 +166,7 @@ export const BacklinkAudit: React.FC = () => {
         </div>
       </div>
 
+      {bingNotice && <p className="tool-note text-xs" role="status">{bingNotice}</p>}
       <BacklinkCharts />
       <ToolInsights tool="backlinks" />
       <BacklinkActions />
