@@ -1,8 +1,15 @@
 import { accessToken } from "./auth";
-import { budget, Env, HttpError } from "./core";
+import { budget, Env, HttpError, stmt } from "./core";
 
 /** GA4 calls with the owner's Google token. A token from before Analytics was added gets a clear reconnect message. */
 async function ga4Json<T>(env: Env, owner: string, url: string, body?: unknown): Promise<T> {
+  // Google's consent screen lets people untick Analytics; say exactly that instead of a generic error.
+  const granted = await stmt(env, "SELECT scopes FROM google_connections WHERE user_id=?", owner).first<{ scopes: string }>();
+  if (granted && !granted.scopes.split(" ").includes("https://www.googleapis.com/auth/analytics.readonly"))
+    throw new HttpError(
+      403,
+      "Your Google sign-in didn't include Analytics. Open Analytics in the project bar, click Connect or reconnect Google and, on Google's screen, tick \"See and download your Google Analytics data\".",
+    );
   await budget(env, "global", "ga4", Number(env.DAILY_GA4_REQUEST_LIMIT || 500));
   const token = await accessToken(env, owner);
   const response = await fetch(url, {
@@ -14,7 +21,7 @@ async function ga4Json<T>(env: Env, owner: string, url: string, body?: unknown):
   if (response.status === 401 || response.status === 403)
     throw new HttpError(
       403,
-      "Google Analytics access was not granted. Use Connect / reconnect Google and allow Analytics, and make sure the Google Analytics Data and Admin APIs are enabled in Google Cloud.",
+      "Google refused the Analytics request. Make sure the Google Analytics Data API and Admin API are enabled in the Google Cloud project that owns this app's sign-in, and that your account can view the property.",
     );
   if (!response.ok)
     throw new HttpError(response.status === 429 ? 429 : 502, `Google Analytics returned HTTP ${response.status}.`);
