@@ -421,6 +421,34 @@ async function api(
         performance.length === 10000 || previousPerformance.length === 10000,
     });
   }
+  if (action === "keywords/import" && req.method === "POST") {
+    const b = z
+      .object({
+        keywords: z.array(z.string().trim().min(1).max(500)).min(1).max(500),
+        location: z.string().max(100).default("All countries"),
+        tags: z.array(z.string().max(100)).max(20).default([]),
+      })
+      .parse(await readBody(req));
+    const list = [...new Set(b.keywords.map((k) => k.toLowerCase()))];
+    // Keywords already tracked keep their history and tags; only new ones are added.
+    const statements = list.map((keyword) => {
+      const id = uid();
+      return stmt(
+        env,
+        "INSERT INTO tracked_keywords VALUES(?,?,?,?,?) ON CONFLICT(project_id,keyword) DO NOTHING",
+        id,
+        p.id,
+        keyword,
+        JSON.stringify({ id, projectId: p.id, keyword, location: b.location, tags: b.tags, device: "desktop", trackingSince: now(), createdAt: now() }),
+        now(),
+      );
+    });
+    let added = 0;
+    for (let i = 0; i < statements.length; i += 80)
+      for (const r of await env.DB.batch(statements.slice(i, i + 80)))
+        added += (r as D1Result).meta?.changes ?? 0;
+    return json({ added, skipped: list.length - added });
+  }
   if (action === "keywords" && req.method === "POST") {
     const b = z
       .object({

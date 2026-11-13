@@ -30,15 +30,41 @@ import {
 import { TrackedKeyword } from "../../types/seo";
 import { syncKeywordPerformance } from "../../services/searchConsole";
 import { MonthFilter, monthsIn } from "../explorer/MonthFilter";
+import { keywordStats, parseKeywordList } from "../../services/explorer";
 
 export const KeywordRanking: React.FC = () => {
   const {
     keywords,
     addTrackedKeyword,
     deleteTrackedKeyword,
+    importKeywords,
+    organicKeywords,
     currentProject,
     reload,
   } = useProject();
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importTag, setImportTag] = useState("");
+  const [importNotice, setImportNotice] = useState("");
+  const stats = keywordStats(keywords);
+  const tracked = new Set(keywords.map((k) => k.keyword.toLowerCase()));
+  // What the site already ranks for in Search Console, by clicks, that isn't tracked yet.
+  const rankingNow = [...organicKeywords]
+    .filter((k) => !tracked.has(k.keyword.toLowerCase()) && Number.isFinite(k.position))
+    .sort((a, b) => b.trafficEstimate - a.trafficEstimate || b.volume - a.volume)
+    .slice(0, 25)
+    .map((k) => k.keyword);
+  const runImport = async (list: string[]) => {
+    if (!list.length) return setImportNotice("No keywords found. Put one keyword per line, or a CSV with keywords in the first column.");
+    if (list.length > 500) return setImportNotice(`That's ${list.length} keywords; import up to 500 at a time.`);
+    try {
+      const r = await importKeywords(list, importTag.trim() ? [importTag.trim()] : []);
+      setImportNotice(`Added ${r.added} keyword${r.added === 1 ? "" : "s"}${r.skipped ? `; ${r.skipped} already tracked` : ""}.`);
+      setImportText("");
+    } catch (e) {
+      setImportNotice(e instanceof Error ? e.message : "Import failed.");
+    }
+  };
 
   useEffect(() => {
     setSelectedKeywordForChart(keywords[0]);
@@ -182,6 +208,13 @@ export const KeywordRanking: React.FC = () => {
             <span>{isSyncingGsc ? "Syncing GSC..." : "Sync GSC Data"}</span>
           </button>
           <button
+            onClick={() => { setImportNotice(""); setIsImportOpen(true); }}
+            className="btn-secondary inline-flex items-center gap-1.5 text-xs font-semibold"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Import Keywords</span>
+          </button>
+          <button
             onClick={() => setIsAddModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-razza-500 hover:bg-razza-600 text-white text-xs font-semibold shadow-sm transition-colors active:scale-95"
           >
@@ -191,6 +224,22 @@ export const KeywordRanking: React.FC = () => {
           <ExportButton onClick={handleExportCsv} label="Export Rankings CSV" />
         </div>
       </div>
+      <section className="kw-stats" aria-label="Tracked keyword statistics">
+        <div><span>Tracked</span><strong>{stats.tracked}</strong><em>{stats.ranking} ranking in this period</em></div>
+        <div>
+          <span>Avg. position</span>
+          <strong>{Number.isFinite(stats.average) ? stats.average.toFixed(1) : "No Data"}</strong>
+          <em>{Number.isFinite(stats.averageChange) ? (
+            <span className={`delta ${Math.abs(stats.averageChange) < 0.05 ? "delta--flat" : stats.averageChange > 0 ? "delta--up" : "delta--down"}`}>
+              {stats.averageChange > 0 ? "▲ " : stats.averageChange < 0 ? "▼ " : ""}{Math.abs(stats.averageChange).toFixed(1)} positions
+            </span>
+          ) : "No earlier period to compare"}</em>
+        </div>
+        <div><span>Top 3</span><strong>{stats.top3}</strong><em>{stats.ranking ? `${Math.round((stats.top3 / stats.ranking) * 100)}% of ranking keywords` : "–"}</em></div>
+        <div><span>Top 10</span><strong>{stats.top10}</strong><em>{stats.ranking ? `${Math.round((stats.top10 / stats.ranking) * 100)}% on page 1` : "–"}</em></div>
+        <div><span>Improved</span><strong className="kw-up">{stats.improved}</strong><em>moved up vs previous period</em></div>
+        <div><span>Declined</span><strong className="kw-down">{stats.declined}</strong><em>moved down vs previous period</em></div>
+      </section>
       <KeywordDrawer
         keyword={selectedKeywordForChart?.keyword || ""}
         open={drawer}
@@ -457,8 +506,53 @@ export const KeywordRanking: React.FC = () => {
       </div>
 
       {/* Add Keyword Modal */}
+      {isImportOpen && (
+        <div className="fixed inset-0 kw-modal flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn" role="dialog" aria-modal="true" aria-labelledby="kw-import-title">
+          <div className="tool-panel relative w-full max-w-lg p-4 shadow-2xl space-y-4">
+            <h3 id="kw-import-title" className="text-base font-bold font-heading text-gray-900 dark:text-white">Import keywords to track</h3>
+            <form onSubmit={(e) => { e.preventDefault(); void runImport(parseKeywordList(importText)); }} className="space-y-3">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Keywords, one per line (or paste a CSV column)
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  rows={7}
+                  placeholder={"seo consultant philippines\ntechnical seo audit\nlink building services"}
+                  className="mt-1 w-full px-2.5 py-2 text-xs rounded-lg border border-gray-300 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-razza-500"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Or upload a CSV / TXT
+                  <input type="file" accept=".csv,.txt,text/csv,text/plain" className="mt-1 block w-full text-xs"
+                    onChange={async (e) => { const f = e.target.files?.[0]; if (f) setImportText(await f.text()); }} />
+                </label>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Tag (optional)
+                  <input type="text" value={importTag} onChange={(e) => setImportTag(e.target.value)} placeholder="e.g. Core Services"
+                    className="mt-1 w-full px-2.5 py-2 text-xs rounded-lg border border-gray-300 dark:border-dark-border bg-white dark:bg-dark-surface text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-razza-500" />
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{parseKeywordList(importText).length} keywords ready. Keywords already tracked are kept as they are.</p>
+              {importNotice && <p className="tool-note text-xs" role="status">{importNotice}</p>}
+              <div className="pt-1 flex flex-wrap gap-2 justify-between">
+                <button type="button" disabled={!rankingNow.length} onClick={() => void runImport(rankingNow)}
+                  className="btn-secondary text-xs font-semibold disabled:opacity-50"
+                  title="Track the queries this site already gets the most clicks for in Search Console">
+                  Track top {rankingNow.length || ""} ranking queries
+                </button>
+                <span className="flex gap-2">
+                  <button type="button" onClick={() => setIsImportOpen(false)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-dark-border text-xs font-medium text-gray-700 dark:text-gray-300">Close</button>
+                  <button type="submit" className="px-4 py-2 rounded-lg bg-razza-500 hover:bg-razza-600 text-white text-xs font-semibold">Import</button>
+                </span>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 kw-modal flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="tool-panel relative w-full max-w-md p-4 shadow-2xl space-y-4">
             <h3 className="text-base font-bold font-heading text-gray-900 dark:text-white">
               Track New Target Keyword

@@ -14,6 +14,7 @@ import {
 } from "../server/crawler";
 import { parseBacklinkCsv, importCsv, recalculate } from "../server/backlinks";
 import { aggregate, unpackRows } from "../src/services/measurements";
+import { keywordStats, parseKeywordList } from "../src/services/explorer";
 import { abbreviate, auditSeverity, backlinkVelocity, countBy, dailySeries, delta, movers, positionDistribution, shareBy, topPages, vitalRating, weeklyVelocity } from "../src/services/explorer";
 import { scoreBacklink } from "../src/services/toxicityEngine";
 import { enqueue, runJobs } from "../server/jobs";
@@ -558,6 +559,33 @@ describe("measurements, quotas and jobs", () => {
     });
     await runJobs(env, "p1");
     expect(sql.prepare("SELECT * FROM gsc_performance").all()).toHaveLength(2);
+  });
+});
+describe("keyword tracking import and statistics", () => {
+  it("reads one keyword per line or the first CSV column, dropping the header and repeats", () => {
+    expect(parseKeywordList('Keyword,Volume\n"SEO Audit",10\nlink building;x\n\nseo audit\r\ntechnical seo\t5')).toEqual(["seo audit", "link building", "technical seo"]);
+  });
+  it("sums up where tracked keywords rank and how they moved", () => {
+    const s = keywordStats([
+      { currentRank: 2, previousRank: 4 },
+      { currentRank: 8, previousRank: 6 },
+      { currentRank: 15, previousRank: NaN },
+      { currentRank: NaN, previousRank: 9 },
+    ]);
+    expect(s).toMatchObject({ tracked: 4, ranking: 3, top3: 1, top10: 2, improved: 1, declined: 1, averageChange: 0 });
+    expect(s.average).toBeCloseTo(25 / 3);
+  });
+  it("imports many keywords at once and keeps ones already tracked", async () => {
+    expect((await request("/projects/p1/keywords", "POST", { keyword: "seo audit", tags: ["Old"] })).status).toBe(200);
+    const r = await request("/projects/p1/keywords/import", "POST", { keywords: ["SEO Audit", "link building", "link building", "technical seo"], tags: ["Imported"] });
+    expect(await r.json()).toEqual({ added: 2, skipped: 1 });
+    const rows = sql.prepare("SELECT keyword, json_extract(data,'$.tags') tags FROM tracked_keywords WHERE project_id='p1' ORDER BY keyword").all();
+    expect(rows).toEqual([
+      { keyword: "link building", tags: '["Imported"]' },
+      { keyword: "seo audit", tags: '["Old"]' },
+      { keyword: "technical seo", tags: '["Imported"]' },
+    ]);
+    expect((await request("/projects/p2/keywords/import", "POST", { keywords: ["x"] })).status).toBe(404);
   });
 });
 describe("Search Console sync stays inside the free D1 write limit", () => {

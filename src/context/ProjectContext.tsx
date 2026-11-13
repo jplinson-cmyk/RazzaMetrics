@@ -132,30 +132,31 @@ function viewData(s: Snapshot): SiteDataStore {
     group.push(row);
     grouped.set(row.keyword, group);
   }
+  // Look rows up by lower-cased keyword once, instead of scanning every row for each keyword.
+  const byKeyword = (list: PerformanceRow[]) => {
+    const m = new Map<string, PerformanceRow[]>();
+    for (const r of list) {
+      const k = r.keyword.toLowerCase();
+      (m.get(k) ?? m.set(k, []).get(k)!).push(r);
+    }
+    return m;
+  };
+  const current = byKeyword(s.performance);
+  const previous = byKeyword(s.previousPerformance);
   const allClicks = aggregate(s.performance).clicks;
   return {
     ...empty,
     keywords: s.keywords.map((k) => {
-      const records = s.performance.filter(
-        (r) => r.keyword.toLowerCase() === k.keyword.toLowerCase(),
-      );
+      const records = current.get(k.keyword.toLowerCase()) ?? [];
+      const before = aggregate(previous.get(k.keyword.toLowerCase()) ?? []).position;
       const a = aggregate(records);
       const dates = [...new Set(records.map((r) => r.date))].sort();
       return {
         id: k.id,
         keyword: k.keyword,
         currentRank: a.position,
-        previousRank: aggregate(
-          s.previousPerformance.filter(
-            (r) => r.keyword.toLowerCase() === k.keyword.toLowerCase(),
-          ),
-        ).position,
-        change:
-          aggregate(
-            s.previousPerformance.filter(
-              (r) => r.keyword.toLowerCase() === k.keyword.toLowerCase(),
-            ),
-          ).position - a.position,
+        previousRank: before,
+        change: before - a.position,
         searchVolume: NaN,
         difficulty: NaN,
         cpc: NaN,
@@ -183,9 +184,7 @@ function viewData(s: Snapshot): SiteDataStore {
         keyword,
         intent: "Unknown",
         position: a.position,
-        previousPosition: aggregate(
-          s.previousPerformance.filter((r) => r.keyword === keyword),
-        ).position,
+        previousPosition: aggregate(previous.get(keyword.toLowerCase()) ?? []).position,
         trafficEstimate: a.clicks,
         trafficPercentage: allClicks ? (a.clicks / allClicks) * 100 : 0,
         volume: a.impressions,
@@ -277,6 +276,8 @@ interface ContextType extends SiteDataStore {
     tags?: string[],
   ) => void;
   deleteTrackedKeyword: (id: string) => void;
+  /** Track many keywords at once; returns how many were new. */
+  importKeywords: (keywords: string[], tags?: string[]) => Promise<{ added: number; skipped: number }>;
   updateBacklinkDisavow: (
     id: string,
     status: "none" | "disavow-link" | "disavow-domain" | "whitelisted",
@@ -556,6 +557,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({
               tags,
             }),
           );
+        },
+        importKeywords: async (keywords, tags = []) => {
+          const r = await projectApi<{ added: number; skipped: number }>(currentId, "keywords/import", "POST", { keywords, tags });
+          await reload();
+          return r;
         },
         deleteTrackedKeyword: (id) => {
           void safely(() => projectApi(currentId, `keywords/${id}`, "DELETE"));

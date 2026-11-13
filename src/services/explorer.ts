@@ -157,6 +157,33 @@ export function shareBy(rows: PerformanceRow[], key: "device" | "country") {
     .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
 }
 
+/** Keywords from pasted text or a CSV: one per line, first column only, header and duplicates dropped. */
+export function parseKeywordList(text: string): string[] {
+  const out = text
+    .split(/\r?\n/)
+    .map((line) => line.split(/[,\t;]/)[0].trim().replace(/^"|"$/g, "").trim().toLowerCase())
+    .filter((k) => k && !["keyword", "keywords", "query", "top queries"].includes(k));
+  return [...new Set(out)];
+}
+
+/** Headline numbers for tracked keywords: where they rank now and how that moved. */
+export function keywordStats(keywords: { currentRank: number; previousRank: number }[]) {
+  const ranked = keywords.filter((k) => Number.isFinite(k.currentRank));
+  const both = ranked.filter((k) => Number.isFinite(k.previousRank));
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((n, x) => n + x, 0) / xs.length : NaN);
+  return {
+    tracked: keywords.length,
+    ranking: ranked.length,
+    average: mean(ranked.map((k) => k.currentRank)),
+    // Positive = average moved up (a smaller position number), for keywords measured in both periods.
+    averageChange: mean(both.map((k) => k.previousRank)) - mean(both.map((k) => k.currentRank)),
+    top3: ranked.filter((k) => k.currentRank <= 3).length,
+    top10: ranked.filter((k) => k.currentRank <= 10).length,
+    improved: both.filter((k) => k.previousRank - k.currentRank >= 0.05).length,
+    declined: both.filter((k) => k.currentRank - k.previousRank >= 0.05).length,
+  };
+}
+
 interface Ranked { keyword: string; position: number; previousPosition: number }
 
 /** Biggest position gains and drops between periods. Change is positions gained (positive = moved up). */
